@@ -205,7 +205,11 @@ HTML = """
   </main>
 
   <script>
-    const STORAGE_KEY = 'pomodoro.settings.v1';
+    const SETTINGS_STORAGE_KEY = 'pomodoro.settings.v1';
+    const POMODOROS_UNTIL_LONG_BREAK = 4;
+    const TICK_SOUND_THRESHOLD_SECONDS = 5;
+    const TICK_GAIN_MULTIPLIER = 0.05;
+    const BEEP_GAIN_MULTIPLIER = 0.12;
 
     const defaults = {
       focusMinutes: 25,
@@ -245,7 +249,7 @@ HTML = """
 
     function loadSettings() {
       try {
-        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        const parsed = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
         return { ...defaults, ...parsed };
       } catch {
         return { ...defaults };
@@ -253,7 +257,7 @@ HTML = """
     }
 
     function saveSettings() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     }
 
     function applyTheme() {
@@ -313,7 +317,7 @@ HTML = """
       const gain = ctx.createGain();
       oscillator.type = 'sine';
       oscillator.frequency.value = kind === 'tick' ? 500 : kind === 'start' ? 880 : 660;
-      gain.gain.value = settings.volume / 100 * (kind === 'tick' ? 0.05 : 0.12);
+      gain.gain.value = settings.volume / 100 * (kind === 'tick' ? TICK_GAIN_MULTIPLIER : BEEP_GAIN_MULTIPLIER);
       oscillator.connect(gain);
       gain.connect(ctx.destination);
       oscillator.start();
@@ -324,7 +328,7 @@ HTML = """
     function nextMode() {
       if (mode === 'focus') {
         settings.completedPomodoros += 1;
-        mode = settings.completedPomodoros % 4 === 0 ? 'longBreak' : 'shortBreak';
+        mode = settings.completedPomodoros % POMODOROS_UNTIL_LONG_BREAK === 0 ? 'longBreak' : 'shortBreak';
       } else {
         mode = 'focus';
       }
@@ -337,7 +341,7 @@ HTML = """
       if (!isRunning) return;
       if (remainingSeconds > 0) {
         remainingSeconds -= 1;
-        if (remainingSeconds > 0 && remainingSeconds <= 5) {
+        if (remainingSeconds > 0 && remainingSeconds <= TICK_SOUND_THRESHOLD_SECONDS) {
           beep('tick');
         }
         updateView();
