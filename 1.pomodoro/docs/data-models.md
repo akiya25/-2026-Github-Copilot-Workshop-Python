@@ -125,6 +125,7 @@ COMPLETE アクション時のモード遷移: `focus → short_break → focus 
 | `RESET` | 任意 → `idle`（初期状態に完全リセット） |
 | `TICK` | `running` 状態で `currentTime` を更新 |
 | `COMPLETE` | `running` → `finished`（モード自動切替・セッションカウント） |
+| `SWITCH_MODE` | モードを直接切り替える（定数定義のみ。`timerReducer` では未実装） |
 
 ### `STORAGE_KEYS`
 

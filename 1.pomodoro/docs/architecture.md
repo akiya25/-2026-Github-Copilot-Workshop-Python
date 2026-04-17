@@ -155,3 +155,4 @@ app.js
 | 永続化（サーバー） | メモリ内辞書（再起動でリセット） |
 | テンプレート | Jinja2（Flask 標準） |
 | スタイル | CSS カスタムプロパティ（CSS Variables）|
+| ダークモード | `@media (prefers-color-scheme: dark)` による自動切替 |
