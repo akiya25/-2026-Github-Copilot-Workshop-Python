@@ -1,185 +1,273 @@
-# フロントエンドドキュメント
+# フロントエンドモジュール仕様
 
-フロントエンドのコード（HTML / CSS / JavaScript）はすべて `app.py` の `build_html()` 関数内にインラインで記述されています。外部ファイルや外部ライブラリへの依存はありません。
+`static/js/` 配下の JavaScript モジュールと UI コンポーネントの仕様です。
 
 ---
 
-## HTML 構造
+## ディレクトリ構成
 
 ```
-body.mode-focus
-├── div.focus-bg          # 集中モード時の背景エフェクト (aria-hidden)
-└── main.panel            # メインパネル
-    ├── div.mode-switch   # モード切替ボタン群
-    │   ├── button#focusBtn   (Focus 25m)
-    │   └── button#breakBtn   (Break 5m)
-    ├── div.ring-wrap     # プログレスリング
-    │   ├── svg           # SVG リング (viewBox="0 0 120 120")
-    │   │   ├── circle.track      # 背景トラック (r=52)
-    │   │   └── circle.progress#progressCircle  # 進捗リング
-    │   └── div.time#timeText     # 残り時間テキスト
-    ├── div.status#statusText     # ステータスメッセージ
-    └── div.controls      # 操作ボタン群
-        ├── button#startBtn  (Start)
-        ├── button#pauseBtn  (Pause)
-        └── button#resetBtn  (Reset)
+static/js/
+├── app.js                      # メインエントリポイント（TimerApp クラス）
+├── domain/
+│   ├── constants.js            # 定数・型定義
+│   ├── timerReducer.js         # 状態管理（Reducer）
+│   └── timeCalc.js             # 時間計算エンジン
+├── infrastructure/
+│   ├── apiClient.js            # Flask API クライアント
+│   ├── notifier.js             # 通知機能
+│   └── sessionRepository.js   # localStorage 永続化
+└── presentation/
+    ├── presenter.js            # 表示データ変換（純粋関数）
+    └── view.js                 # DOM 操作（View クラス）
 ```
 
 ---
 
-## CSS コンポーネント
+## app.js — TimerApp クラス
 
-### CSS カスタムプロパティ（変数）
+アプリケーションのメインクラスです。全モジュールを統合し、タイマーの動作を制御します。
 
-| 変数 | 初期値 | 説明 |
-|------|--------|------|
-| `--bg` | `#0f172a` | ページ背景色 |
-| `--surface` | `rgba(15,23,42,0.78)` | パネル背景色 |
-| `--text` | `#e2e8f0` | テキスト色 |
-| `--color-calm` | `#4da3ff` | 残り時間75%超のリング色 |
-| `--color-steady` | `#47d7ac` | 残り時間50〜75%のリング色 |
-| `--color-mid` | `#ffd166` | 残り時間25〜50%のリング色 |
-| `--color-danger` | `#ff5d73` | 残り時間25%以下のリング色 |
-| `--ring-color` | `var(--color-calm)` | 現在のリング色（JS で動的更新） |
-| `--ring-size` | `min(66vw, 340px)` | リングの表示サイズ |
-| `--ring-stroke` | `14` | リングの線幅 |
+### 初期化処理
 
-### アニメーション
+1. `sessionRepository.getTodayStats()` で localStorage から統計を復元
+2. `requestNotificationPermission()` でブラウザ通知パーミッションを要求
+3. `view.ensurePauseButton()` / `view.ensureResumeButton()` でボタンを追加
+4. イベントリスナーをセットアップ
+5. `syncStatsFromServer()` でサーバーと localStorage の差分を同期
 
-| アニメーション名 | 対象 | 説明 |
-|---------------|------|------|
-| `drift` | `.focus-bg::after` | ドットパターンのゆっくりした移動 |
-| `pop` | `.burst` | タイマー完了時の爆発ドット |
+### 主なメソッド
 
-### アクセシビリティ
-
-`prefers-reduced-motion: reduce` メディアクエリが適用されている場合、すべてのアニメーション・トランジションが無効化されます。
+| メソッド | 説明 |
+|---|---|
+| `start()` | タイマー開始。`idle` または `finished` 状態の場合のみ実行 |
+| `pause()` | タイマー一時停止 |
+| `resume()` | タイマー再開 |
+| `reset()` | タイマーをリセット（初期状態に戻す） |
+| `tick()` | `requestAnimationFrame` で毎フレーム呼ばれる更新処理 |
+| `onSessionComplete(mode)` | セッション完了時の処理（通知・localStorage・API 同期） |
+| `render()` | 画面全体を現在の状態で更新 |
+| `syncStatsFromServer()` | 起動時にサーバー統計と localStorage を同期 |
+| `syncCompletedFocusSession(completedAt)` | focus 完了時にサーバーへセッションを送信 |
 
 ---
 
-## JavaScript 関数
+## domain/timerReducer.js — 状態管理
 
-### `easeOutSine(x)`
+`(state, action) => newState` の純粋関数です。
 
-進捗リングの描画に使用するイージング関数。
+### initialState
 
 ```javascript
-function easeOutSine(x) { return Math.sin((x * Math.PI) / 2); }
-```
-
-| 引数 | 型 | 説明 |
-|------|----|------|
-| `x` | `number` | 0〜1 の線形進捗値 |
-| 戻り値 | `number` | イージング後の 0〜1 の値 |
-
-`prefers-reduced-motion` が有効な場合、イージングは適用されず線形値がそのまま使用されます。
-
----
-
-### `formatTime(ms)`
-
-ミリ秒を `MM:SS` 形式の文字列に変換します。
-
-```javascript
-function formatTime(ms) {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  const mm = String(Math.floor(s / 60)).padStart(2, '0');
-  const ss = String(s % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
+{
+  status: 'idle',
+  mode: 'focus',
+  currentTime: 1500,  // 25分（秒）
+  targetTime: null,
+  totalSessions: 0
 }
 ```
 
-| 引数 | 型 | 説明 |
-|------|----|------|
-| `ms` | `number` | ミリ秒 |
-| 戻り値 | `string` | `"MM:SS"` 形式の文字列 |
+### timerReducer(state, action)
+
+各アクションの `now` プロパティは `Date.now() / 1000`（UNIX timestamp 秒）です。
+
+| アクション | 処理内容 |
+|---|---|
+| `START` | `targetTime = now + currentTime` を設定し `running` へ遷移 |
+| `PAUSE` | `running` 状態のみ `paused` へ遷移 |
+| `RESUME` | `paused` 状態のみ `targetTime` を再設定し `running` へ遷移 |
+| `RESET` | `initialState` に完全リセット |
+| `TICK` | `currentTime = max(0, targetTime - now)` を更新（ドリフト対応） |
+| `COMPLETE` | `finished` へ遷移。次のモードへ自動切替（`focus→short_break→focus`）。focus 完了時に `totalSessions` をインクリメント |
 
 ---
 
-### `colorByRatio(ratio)`
+## domain/timeCalc.js — 時間計算エンジン
 
-残り時間の割合に応じた CSS カラー変数名を返します。
+| 関数 | シグネチャ | 説明 |
+|---|---|---|
+| `formatTime` | `(seconds: number) => string` | 秒数を `"mm:ss"` 形式に変換。`Math.ceil` で切り上げ |
+| `calculateProgress` | `(remaining: number, total: number) => number` | 残り時間から進捗率（0〜100）を計算 |
+| `calculateRemaining` | `(targetTime: number) => number` | `targetTime - Date.now()/1000` で残り時間を計算（負数は 0） |
+| `calculateSvgProgress` | `(progress: number, radius?: number) => object` | SVG 円形プログレス用の `{ dashArray, dashOffset }` を返す |
 
-| ratio の範囲 | 戻り値 |
-|-------------|--------|
-| > 0.75 | `'var(--color-calm)'` |
-| > 0.5 | `'var(--color-steady)'` |
-| > 0.25 | `'var(--color-mid)'` |
-| ≤ 0.25 | `'var(--color-danger)'` |
+**`formatTime` 例**
 
----
-
-### `setMode(nextMode)`
-
-タイマーモードを切り替えます。タイマーを停止して初期状態にリセットします。
-
-| 引数 | 型 | 値 |
-|------|----|-----|
-| `nextMode` | `string` | `'focus'` または `'break'` |
-
-処理内容：
-1. `mode`・`total`・`remainingMs`・`baseMs` を更新
-2. 実行中のタイマーを停止 (`cancelAnimationFrame`)
-3. `body.mode-focus` クラスを切り替え
-4. ボタンの `primary` クラスを切り替え
-5. ステータステキストを更新
-6. `render()` を呼び出して UI を描画
-
----
-
-### `render()`
-
-現在の `remainingMs` に基づいて UI を更新します。
-
-処理内容：
-1. `ratio = remainingMs / (total * 1000)` を計算
-2. `easeOutSine(ratio)` でイージングを適用（`reduceMotion` が false の場合）
-3. SVG プログレスリングの `strokeDashoffset` を更新
-4. `--ring-color` CSS 変数を `colorByRatio(ratio)` で更新
-5. `timeText` の表示を更新
-6. `statusText` を更新（完了時は `'完了！お疲れさまでした'`）
-
-プログレスリングの計算：
+```javascript
+formatTime(1500)  // "25:00"
+formatTime(75)    // "01:15"
+formatTime(0)     // "00:00"
 ```
-circumference = 2 * π * 52 ≈ 326.73
-strokeDashoffset = circumference * (1 - eased)
+
+**`calculateProgress` 例**
+
+```javascript
+calculateProgress(1500, 1500)  // 0   (開始直後)
+calculateProgress(750, 1500)   // 50  (中間)
+calculateProgress(0, 1500)     // 100 (完了)
 ```
 
 ---
 
-### `burst()`
+## presentation/presenter.js — 表示データ変換
 
-タイマー完了時に26個のドットを放射状に飛ばすアニメーションを実行します。
+状態オブジェクトを UI 表示用データへ変換する純粋関数群です。
 
-`prefers-reduced-motion` が有効な場合は何もしません。
+| 関数 | シグネチャ | 説明 |
+|---|---|---|
+| `renderTime` | `(seconds: number) => string` | `formatTime` のラッパー |
+| `renderProgressRing` | `(remaining: number, total: number) => object` | SVG 進捗リング用パラメータを返す |
+| `renderStatus` | `(status: string, mode: string) => string` | 状態＋モードを日本語テキストに変換 |
+| `renderDailyStats` | `(completed: number, focusMinutes: number) => object` | 表示用統計データを返す |
+| `renderButtonStates` | `(status: string) => object` | 各ボタンの有効/無効フラグを返す |
 
-| 定数 | 値 | 説明 |
-|------|----|------|
-| `BURST_DOT_COUNT` | `26` | ドット数 |
-| `MIN_BURST_DISTANCE` | `80` | 最小飛散距離（px） |
-| `BURST_DISTANCE_RANGE` | `140` | 飛散距離のランダム幅（px） |
+**`renderStatus` のマッピング**
 
-使用色：`#4da3ff`、`#47d7ac`、`#ffd166`、`#ff5d73`
+| status + mode | 表示テキスト |
+|---|---|
+| `idle` | 未開始 |
+| `running_focus` | 作業中 |
+| `running_short_break` | 短休憩中 |
+| `running_long_break` | 長休憩中 |
+| `paused_focus` | 一時停止中（作業） |
+| `paused_short_break` | 一時停止中（休憩） |
+| `paused_long_break` | 一時停止中（長休憩） |
+| `finished_focus` | 作業完了 |
+| `finished_short_break` | 休憩完了 |
+| `finished_long_break` | 長休憩完了 |
+
+**`renderButtonStates` の返却値**
+
+```javascript
+{
+  startBtn: status === 'idle' || status === 'finished',
+  pauseBtn: status === 'running',
+  resumeBtn: status === 'paused',
+  resetBtn: status !== 'idle'
+}
+```
+
+**`renderDailyStats` の返却値**
+
+```javascript
+{
+  completedSessions: number,   // 完了セッション数
+  focusTimeDisplay: string     // 集中時間（60分未満は "分" のみ、60分以上は "h:mm" 形式）
+}
+```
 
 ---
 
-### `tick(now)`
+## presentation/view.js — View クラス
 
-`requestAnimationFrame` のコールバック関数。タイマーが動作中の間、毎フレーム呼ばれます。
+DOM 操作のみを担当するクラスです。ビジネスロジックを持ちません。
 
-1. `remainingMs = baseMs - (now - startEpoch)` を計算
-2. `render()` を呼び出して UI を更新
-3. 残り時間が 0 以下になったら `burst()` を呼び出して終了
-4. それ以外は `requestAnimationFrame(tick)` で次フレームをスケジュール
+| メソッド | 対象要素 | 説明 |
+|---|---|---|
+| `updateTimer(timeString)` | `#timer` | タイマー時間表示を更新 |
+| `updateProgressRing(ringData)` | `#progress-ring` | SVG の `stroke-dashoffset` を更新 |
+| `updateStatus(statusText)` | `#status` | ステータスラベルを更新 |
+| `updateMode(modeLabel, caption)` | `#mode-badge`, `#timer-caption` | モード表示・補助テキストを更新 |
+| `updateThemeMode(mode)` | `body[data-mode]` | CSS テーマ切替のための `data-mode` 属性を更新 |
+| `updateStats(statsData)` | `#session-count`, `#focus-time` | 統計情報を更新 |
+| `updateButtonStates(btnStates)` | 各ボタン | `disabled` 属性と表示/非表示を更新 |
+| `updatePageTitle(title)` | `document.title` | ページタイトルを更新 |
+| `setFaviconBlinking()` | `document.title` | 5 秒間タイトルを点滅させる（フォールバック通知） |
+| `ensurePauseButton()` | `.button-group` | `#pause-btn` が存在しない場合に動的に追加 |
+| `ensureResumeButton()` | `.button-group` | `#resume-btn` が存在しない場合に動的に追加 |
 
 ---
 
-## ボタンイベントハンドラー
+## infrastructure/apiClient.js — ApiClient クラス
 
-| ボタン | イベント | 動作 |
-|--------|---------|------|
-| `startBtn` | `click` | タイマーを開始（`isRunning=true` かつ `remainingMs>0` の場合のみ） |
-| `pauseBtn` | `click` | タイマーを一時停止（`isRunning=false`、`cancelAnimationFrame`） |
-| `resetBtn` | `click` | `setMode(mode)` で現在モードをリセット |
-| `focusBtn` | `click` | `setMode('focus')` |
-| `breakBtn` | `click` | `setMode('break')` |
+Flask バックエンド API との通信を担当します。
+
+| メソッド | HTTP | エンドポイント | 説明 |
+|---|---|---|---|
+| `getStatsToday()` | GET | `/api/stats/today` | 当日統計を取得 |
+| `createSession(mode, duration, completedAt)` | POST | `/api/sessions` | セッションを記録 |
+| `resetToday()` | POST | `/api/reset-today` | 当日データをリセット |
+
+すべてのメソッドは `async` で、レスポンスが `ok` でない場合は `Error` をスローします。
+
+---
+
+## infrastructure/sessionRepository.js — SessionRepository クラス
+
+localStorage を使った当日セッションの永続化を担当します。
+
+| メソッド | 説明 |
+|---|---|
+| `getTodayStats()` | 当日の統計（`completedSessions`・`focusMinutes`）を返す |
+| `getTodayRecord()` | 当日のレコードを返す。日付が変わっていたら空レコードにリセット |
+| `recordCompletedFocusSession(completedAt?)` | focus セッション完了を記録し、更新後の統計を返す |
+| `clearTodayStats()` | 当日データをクリアし、空の統計を返す |
+
+**コンストラクタ**
+
+```javascript
+new SessionRepository(
+  storage = globalThis.localStorage,
+  nowProvider = () => new Date()
+)
+```
+
+テスト時は `storage` と `nowProvider` をモックに差し替えられます。
+
+---
+
+## infrastructure/notifier.js — 通知機能
+
+| 関数 | 説明 |
+|---|---|
+| `requestNotificationPermission()` | Notification API のパーミッションをリクエスト（`async`、`boolean` を返す） |
+| `showNotification(title, options?)` | ブラウザ通知を表示。パーミッションがない場合は `null` を返す |
+| `playBeepSound(volume?, frequency?, duration?)` | Web Audio API でビープ音を生成（デフォルト: 0.3, 440Hz, 0.5秒） |
+| `notifyCompletion(mode)` | モードに応じたブラウザ通知＋サウンド＋フォールバックを実行 |
+| `notifyCompletionFull(mode)` | `notifyCompletion` に加えてスマートフォン振動も実行 |
+| `setFaviconBlinking()` | 5 秒間（500ms × 10 回）タイトルに `"✓ "` を点滅 |
+| `updatePageTitleNotification(title)` | 3 秒間タイトルを `"📢 {title}"` に更新 |
+| `vibrateDevice(pattern?)` | Vibration API で振動（デフォルト: `[200, 100, 200]`） |
+
+**通知メッセージ**
+
+| mode | 通知タイトル | 通知本文 |
+|---|---|---|
+| `focus` | ポモドーロタイマー | 作業セッションが終了しました。休憩を始めてください。 |
+| `short_break` | ポモドーロタイマー | 休憩時間が終了しました。次のセッションを開始してください。 |
+| `long_break` | ポモドーロタイマー | 長休憩が終了しました。準備はいいですか？ |
+
+---
+
+## HTML テンプレート（templates/index.html）
+
+### 主要 DOM 要素
+
+| 要素 ID / セレクタ | 説明 |
+|---|---|
+| `#mode-badge` | 現在のモード表示（例: 「集中」「短休憩」） |
+| `#status` | ステータスラベル（例: 「作業中」「一時停止中」） |
+| `#timer-caption` | タイマー補助テキスト（例: 「次の25分に集中」） |
+| `#timer` | タイマー時間表示（例: 「25:00」） |
+| `#progress-ring` | SVG 円形プログレスインジケーター |
+| `#start-btn` | 開始ボタン（完了後は「次を開始」に変わる） |
+| `#pause-btn` | 停止ボタン（実行中のみ表示） |
+| `#resume-btn` | 再開ボタン（一時停止中のみ表示） |
+| `#reset-btn` | リセットボタン（`idle` 以外で有効） |
+| `#session-count` | 当日完了セッション数 |
+| `#focus-time` | 当日集中時間 |
+| `.button-group` | ボタンのコンテナ（`#pause-btn`, `#resume-btn` を動的追加） |
+| `body[data-mode]` | CSS テーマ切替用属性（`focus` / `short_break` / `long_break`） |
+
+---
+
+## CSS テーマ（static/css/styles.css）
+
+CSS カスタムプロパティ（変数）でテーマを管理します。`body[data-mode]` 属性で自動切替されます。
+
+| モード | 背景グラデーション | アクセント色 |
+|---|---|---|
+| `focus`（デフォルト） | 暖色系（`#fff4dd` → `#ffd5c2`） | オレンジ（`#d4632f`） |
+| `short_break` | 緑系（`#ebfff8` → `#c8f1eb`） | グリーン（`#1f7a72`） |
+| `long_break` | 青系（`#edf4ff` → `#d8e5ff`） | ブルー（`#4564c7`） |
