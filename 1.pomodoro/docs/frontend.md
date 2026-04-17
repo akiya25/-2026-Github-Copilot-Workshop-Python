@@ -32,14 +32,17 @@ static/js/
 
 1. `sessionRepository.getTodayStats()` で localStorage から統計を復元
 2. `requestNotificationPermission()` でブラウザ通知パーミッションを要求
-3. `view.ensurePauseButton()` / `view.ensureResumeButton()` でボタンを追加
-4. イベントリスナーをセットアップ
-5. `syncStatsFromServer()` でサーバーと localStorage の差分を同期
+3. `setupUI()` → `view.ensurePauseButton()` / `view.ensureResumeButton()` でボタンを準備
+4. `setupEventListeners()` でイベントリスナーをセットアップ
+5. `render()` で初期画面を描画
+6. `syncStatsFromServer()` でサーバーと localStorage の差分を同期
 
 ### 主なメソッド
 
 | メソッド | 説明 |
 |---|---|
+| `setupUI()` | `ensurePauseButton()` / `ensureResumeButton()` を呼び出してボタンを準備 |
+| `setupEventListeners()` | 各ボタンにクリックイベントリスナーを登録 |
 | `start()` | タイマー開始。`idle` または `finished` 状態の場合のみ実行 |
 | `pause()` | タイマー一時停止 |
 | `resume()` | タイマー再開 |
@@ -47,8 +50,11 @@ static/js/
 | `tick()` | `requestAnimationFrame` で毎フレーム呼ばれる更新処理 |
 | `onSessionComplete(mode)` | セッション完了時の処理（通知・localStorage・API 同期） |
 | `render()` | 画面全体を現在の状態で更新 |
+| `updateButtonLabels()` | 開始ボタンのテキストを状態に応じて動的更新（`finished` 時は「次を開始」） |
+| `getModeCaption()` | 現在のモード・状態に応じた補助テキストを返す |
 | `syncStatsFromServer()` | 起動時にサーバー統計と localStorage を同期 |
-| `syncCompletedFocusSession(completedAt)` | focus 完了時にサーバーへセッションを送信 |
+| `syncCompletedFocusSession(completedAt)` | focus 完了時にサーバーへセッションを送信し統計を更新 |
+| `updateDailyStats(stats)` | `dailyStats` を更新し `render()` を呼び出す |
 
 ---
 
@@ -224,8 +230,8 @@ new SessionRepository(
 | `requestNotificationPermission()` | Notification API のパーミッションをリクエスト（`async`、`boolean` を返す） |
 | `showNotification(title, options?)` | ブラウザ通知を表示。パーミッションがない場合は `null` を返す |
 | `playBeepSound(volume?, frequency?, duration?)` | Web Audio API でビープ音を生成（デフォルト: 0.3, 440Hz, 0.5秒） |
-| `notifyCompletion(mode)` | モードに応じたブラウザ通知＋サウンド＋フォールバックを実行 |
-| `notifyCompletionFull(mode)` | `notifyCompletion` に加えてスマートフォン振動も実行 |
+| `notifyCompletion(mode)` | モードに応じたブラウザ通知＋サウンド＋フォールバック（`setFaviconBlinking` + `updatePageTitleNotification`）を実行 |
+| `notifyCompletionFull(mode)` | `playBeepSound` を呼び出した後、`notifyCompletion` を呼び出し（音が計2回鳴る）、さらに `vibrateDevice` でスマートフォン振動を実行 |
 | `setFaviconBlinking()` | 5 秒間（500ms × 10 回）タイトルに `"✓ "` を点滅 |
 | `updatePageTitleNotification(title)` | 3 秒間タイトルを `"📢 {title}"` に更新 |
 | `vibrateDevice(pattern?)` | Vibration API で振動（デフォルト: `[200, 100, 200]`） |
@@ -246,18 +252,18 @@ new SessionRepository(
 
 | 要素 ID / セレクタ | 説明 |
 |---|---|
-| `#mode-badge` | 現在のモード表示（例: 「集中」「短休憩」） |
+| `#mode-badge` | 現在のモード表示（例: 「集中モード」「短休憩」） |
 | `#status` | ステータスラベル（例: 「作業中」「一時停止中」） |
 | `#timer-caption` | タイマー補助テキスト（例: 「次の25分に集中」） |
 | `#timer` | タイマー時間表示（例: 「25:00」） |
 | `#progress-ring` | SVG 円形プログレスインジケーター |
-| `#start-btn` | 開始ボタン（完了後は「次を開始」に変わる） |
-| `#pause-btn` | 停止ボタン（実行中のみ表示） |
-| `#resume-btn` | 再開ボタン（一時停止中のみ表示） |
+| `#start-btn` | 開始ボタン（`finished` 状態では「次を開始」に変わる） |
+| `#pause-btn` | 停止ボタン（HTML に初期配置済み。実行中のみ表示） |
+| `#resume-btn` | 再開ボタン（HTML に初期配置済み。一時停止中のみ表示） |
 | `#reset-btn` | リセットボタン（`idle` 以外で有効） |
 | `#session-count` | 当日完了セッション数 |
 | `#focus-time` | 当日集中時間 |
-| `.button-group` | ボタンのコンテナ（`#pause-btn`, `#resume-btn` を動的追加） |
+| `.button-group` | ボタンのコンテナ |
 | `body[data-mode]` | CSS テーマ切替用属性（`focus` / `short_break` / `long_break`） |
 
 ---
@@ -266,8 +272,20 @@ new SessionRepository(
 
 CSS カスタムプロパティ（変数）でテーマを管理します。`body[data-mode]` 属性で自動切替されます。
 
+### ライトモード
+
 | モード | 背景グラデーション | アクセント色 |
 |---|---|---|
 | `focus`（デフォルト） | 暖色系（`#fff4dd` → `#ffd5c2`） | オレンジ（`#d4632f`） |
 | `short_break` | 緑系（`#ebfff8` → `#c8f1eb`） | グリーン（`#1f7a72`） |
 | `long_break` | 青系（`#edf4ff` → `#d8e5ff`） | ブルー（`#4564c7`） |
+
+### ダークモード（`@media (prefers-color-scheme: dark)`）
+
+OS のカラースキームが `dark` の場合、各モードの配色が自動的に切り替わります。
+
+| モード | 背景グラデーション | アクセント色 |
+|---|---|---|
+| `focus`（デフォルト） | 暗い暖色系（`#1a1008` → `#2c1a10`） | オレンジ（`#e87a45`） |
+| `short_break` | 暗い緑系（`#08181a` → `#0e2c2a`） | グリーン（`#2aa99d`） |
+| `long_break` | 暗い青系（`#0c1020` → `#142040`） | ブルー（`#6382dc`） |
