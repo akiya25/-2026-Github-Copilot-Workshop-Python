@@ -264,12 +264,15 @@ def build_html() -> str:
 
     function burst() {{
       if (reduceMotion) return;
+      const BURST_DOT_COUNT = 26;
+      const MIN_BURST_DISTANCE = 80;
+      const BURST_DISTANCE_RANGE = 140;
       const colors = ['#4da3ff', '#47d7ac', '#ffd166', '#ff5d73'];
-      for (let i = 0; i < 26; i += 1) {{
+      for (let i = 0; i < BURST_DOT_COUNT; i += 1) {{
         const dot = document.createElement('span');
         dot.className = 'burst';
-        const angle = (Math.PI * 2 * i) / 26;
-        const distance = 80 + Math.random() * 140;
+        const angle = (Math.PI * 2 * i) / BURST_DOT_COUNT;
+        const distance = MIN_BURST_DISTANCE + Math.random() * BURST_DISTANCE_RANGE;
         dot.style.setProperty('--x', `${Math.cos(angle) * distance}px`);
         dot.style.setProperty('--y', `${Math.sin(angle) * distance}px`);
         dot.style.background = colors[i % colors.length];
