@@ -283,8 +283,9 @@ HTML_TEMPLATE = """<!doctype html>
     }
 
     function statsForDays(state, days) {
+      const safeDays = Math.max(1, Number(days) || 0);
       const now = new Date();
-      const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+      const cutoff = new Date(now.getTime() - (safeDays - 1) * 24 * 60 * 60 * 1000);
       const items = state.history.filter(h => new Date(h.ts) >= cutoff);
       const attempted = items.length;
       const completedItems = items.filter(h => h.completed);
@@ -292,7 +293,7 @@ HTML_TEMPLATE = """<!doctype html>
       const focusMinutes = completedItems.reduce((acc, h) => acc + (h.focusMinutes || 0), 0);
       const completionRate = attempted ? (completed / attempted) * 100 : 0;
       const avgFocus = completed ? (focusMinutes / completed) : 0;
-      const avgSessionsPerDay = completed / days;
+      const avgSessionsPerDay = completed / safeDays;
 
       const hourCounts = Array.from({ length: 24 }, () => 0);
       for (const item of completedItems) {
@@ -310,8 +311,8 @@ HTML_TEMPLATE = """<!doctype html>
       const unlocked = new Set(state.badges || []);
       const newOnes = [];
       if (state.streak >= 3 && !unlocked.has('streak_3')) newOnes.push('streak_3');
-      const completedSessionsLast7Days = statsForDays(state, 7).hourCounts.reduce((a, b) => a + b, 0);
-      if (completedSessionsLast7Days >= 10 && !unlocked.has('week_10')) newOnes.push('week_10');
+      const weeklyCompletedSessions = statsForDays(state, 7).hourCounts.reduce((a, b) => a + b, 0);
+      if (weeklyCompletedSessions >= 10 && !unlocked.has('week_10')) newOnes.push('week_10');
 
       if (newOnes.length) {
         state.badges = [...unlocked, ...newOnes];
