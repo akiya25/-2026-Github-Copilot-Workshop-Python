@@ -8,6 +8,7 @@ from typing import Any
 
 XP_PER_FOCUS = 25
 XP_PER_LEVEL = 100
+FOCUS_MINUTES = 25
 STATE_FILE = Path(__file__).with_name("pomodoro_state.json")
 
 
@@ -105,7 +106,7 @@ def _save_server_state(payload: dict[str, Any]) -> None:
     STATE_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-HTML = """<!doctype html>
+HTML_TEMPLATE = """<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
@@ -140,7 +141,7 @@ HTML = """<!doctype html>
     <section class="card">
       <h1 class="headline">Pomodoro ゲーミフィケーション</h1>
       <div class="row">
-        <button id="complete-btn">集中セッション完了 (+25 XP)</button>
+        <button id="complete-btn">集中セッション完了 (+__XP_PER_FOCUS__ XP)</button>
         <button id="attempt-btn" class="secondary">セッション試行のみ (+0 XP)</button>
       </div>
     </section>
@@ -174,7 +175,9 @@ HTML = """<!doctype html>
 
   <script>
     const STORAGE_KEY = 'pomodoro_gamification_v1';
-    const XP_PER_FOCUS = 25;
+    const XP_PER_FOCUS = __XP_PER_FOCUS__;
+    const XP_PER_LEVEL = __XP_PER_LEVEL__;
+    const FOCUS_MINUTES = __FOCUS_MINUTES__;
 
     const BADGES = [
       { id: 'streak_3', title: '3日連続完了', description: '3日連続で集中セッションを完了' },
@@ -275,8 +278,8 @@ HTML = """<!doctype html>
     }
 
     function getLevel(totalXP) {
-      const level = Math.floor(totalXP / 100) + 1;
-      return { level, progressXP: totalXP % 100, next: 100 };
+      const level = Math.floor(totalXP / XP_PER_LEVEL) + 1;
+      return { level, progressXP: totalXP % XP_PER_LEVEL, next: XP_PER_LEVEL };
     }
 
     function statsForDays(state, days) {
@@ -383,11 +386,11 @@ HTML = """<!doctype html>
     function registerAttempt(state, completed) {
       refreshStreakForToday(state);
       state.attempted += 1;
-      const item = { ts: new Date().toISOString(), completed, focusMinutes: completed ? 25 : 0 };
+      const item = { ts: new Date().toISOString(), completed, focusMinutes: completed ? FOCUS_MINUTES : 0 };
       state.history.push(item);
       if (completed) {
         state.completed += 1;
-        state.totalFocusMinutes += 25;
+        state.totalFocusMinutes += FOCUS_MINUTES;
         state.totalXP += XP_PER_FOCUS;
         updateStreakOnComplete(state);
       }
@@ -408,6 +411,12 @@ HTML = """<!doctype html>
 </body>
 </html>
 """
+
+HTML = (
+    HTML_TEMPLATE.replace("__XP_PER_FOCUS__", str(XP_PER_FOCUS))
+    .replace("__XP_PER_LEVEL__", str(XP_PER_LEVEL))
+    .replace("__FOCUS_MINUTES__", str(FOCUS_MINUTES))
+)
 
 
 class Handler(BaseHTTPRequestHandler):
