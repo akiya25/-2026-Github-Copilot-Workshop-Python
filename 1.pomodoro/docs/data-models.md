@@ -1,37 +1,74 @@
 # データモデル
 
-Pomodoro アプリはデータベースを使用しません。サーバー側の永続化ストレージはなく、すべての状態はブラウザの JavaScript 変数として管理されます。
+Pomodoro ゲーミフィケーションアプリはデータベースを使用しません。サーバー側の永続化はファイル（`pomodoro_state.json`）を使用し、クライアント側は `localStorage` に同一のオブジェクトを保存します。
+
+---
 
 ## サーバー側定数
 
-`app.py` で定義される定数です。`build_html()` によって HTML 内の JavaScript に埋め込まれます。
+`app.py` で定義される定数です。`HTML_TEMPLATE` によって HTML 内の JavaScript に埋め込まれます。
 
 | 定数名 | 型 | 値 | 説明 |
 |--------|----|----|------|
-| `FOCUS_SECONDS` | `int` | `1500` | 集中タイムの秒数（25分） |
-| `BREAK_SECONDS` | `int` | `300` | 休憩タイムの秒数（5分） |
+| `XP_PER_FOCUS` | `int` | `25` | 集中セッション完了時に獲得できる XP |
+| `XP_PER_LEVEL` | `int` | `100` | 1 レベルアップに必要な累積 XP |
+| `FOCUS_MINUTES` | `int` | `25` | 集中セッションの時間（分） |
 
-## フロントエンド状態変数
+---
 
-ブラウザ上の JavaScript が保持するランタイム状態です。
+## 状態オブジェクト
 
-| 変数名 | 型 | 初期値 | 説明 |
-|--------|-----|--------|------|
-| `mode` | `string` | `'focus'` | 現在のモード (`'focus'` または `'break'`) |
-| `total` | `number` | `totalFocus` | 現在のモードの合計秒数 |
-| `remainingMs` | `number` | `total * 1000` | 残り時間（ミリ秒） |
-| `isRunning` | `boolean` | `false` | タイマーが動作中かどうか |
-| `startEpoch` | `number` | `0` | タイマー開始時点の `performance.now()` 値 |
-| `baseMs` | `number` | `remainingMs` | タイマー開始時点の残り時間（ミリ秒） |
-| `frameId` | `number` | `0` | `requestAnimationFrame` のフレームID |
+ブラウザの `localStorage` とサーバーの `pomodoro_state.json` に保存される JSON オブジェクトです。
 
-## カラーステージ定義
+| フィールド | 型 | 説明 |
+|------------|-----|------|
+| `totalXP` | `number` | 累積 XP（集中セッション完了ごとに `XP_PER_FOCUS` 加算） |
+| `completed` | `number` | 集中セッション完了数の累計 |
+| `attempted` | `number` | セッション試行数の累計（完了・未完了含む） |
+| `totalFocusMinutes` | `number` | 累積集中時間（分） |
+| `history` | `HistoryItem[]` | セッション履歴の配列 |
+| `streak` | `number` | 現在の連続完了日数 |
+| `maxStreak` | `number` | 過去最大の連続完了日数 |
+| `lastCompletionDate` | `string \| null` | 最後に集中セッションを完了した日付（`"YYYY-MM-DD"` 形式） |
+| `badges` | `string[]` | 獲得済みバッジ ID の配列 |
+| `updatedAt` | `string` | 最終更新タイムスタンプ（ISO 8601）。サーバーへの保存時に自動付与 |
 
-残り時間の割合に応じてリングの色が変化します。
+---
 
-| CSS 変数 | 色コード | 適用条件（ratio） |
-|----------|----------|----------------|
-| `--color-calm` | `#4da3ff` | ratio > 0.75（残り75%以上） |
-| `--color-steady` | `#47d7ac` | ratio > 0.5（残り50〜75%） |
-| `--color-mid` | `#ffd166` | ratio > 0.25（残り25〜50%） |
-| `--color-danger` | `#ff5d73` | ratio ≤ 0.25（残り25%以下） |
+## HistoryItem（履歴エントリ）
+
+`history` 配列の各要素の構造です。
+
+| フィールド | 型 | 説明 |
+|------------|-----|------|
+| `ts` | `string` | セッション記録時刻（ISO 8601 タイムスタンプ） |
+| `completed` | `boolean` | 集中セッションとして完了したかどうか |
+| `focusMinutes` | `number` | 完了時は `FOCUS_MINUTES`（25）、未完了時は `0` |
+
+---
+
+## バッジ定義
+
+| バッジ ID | タイトル | 解放条件 |
+|----------|---------|---------|
+| `streak_3` | 3日連続完了 | `streak >= 3` |
+| `week_10` | 今週10回完了 | 過去 7 日間の完了済みセッション数 >= 10 |
+
+---
+
+## レベル計算
+
+| 計算項目 | 式 |
+|--------|-----|
+| レベル | `floor(totalXP / XP_PER_LEVEL) + 1` |
+| 現レベル内の進捗 XP | `totalXP % XP_PER_LEVEL` |
+| 次レベルに必要な XP | `XP_PER_LEVEL`（固定） |
+
+---
+
+## ストリーク計算ルール
+
+- `lastCompletionDate` から今日までの日数差 (`gap`) が `> 1` の場合、ストリークは 0 にリセットされる。
+- 当日に初めて完了した場合（`gap == 1`）は `streak += 1`。
+- 同日に複数回完了した場合（`gap <= 0`）は `streak` を変更しない（ただし最小値 1）。
+- 初めて完了した場合（`lastCompletionDate == null`）は `streak = 1`。

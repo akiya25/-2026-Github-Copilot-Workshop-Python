@@ -1,28 +1,32 @@
 # フロントエンドドキュメント
 
-フロントエンドのコード（HTML / CSS / JavaScript）はすべて `app.py` の `build_html()` 関数内にインラインで記述されています。外部ファイルや外部ライブラリへの依存はありません。
+フロントエンドのコード（HTML / CSS / JavaScript）はすべて `app.py` の `HTML_TEMPLATE` 文字列にインラインで記述されています。外部ファイルや外部ライブラリへの依存はありません。起動時に定数（`XP_PER_FOCUS`、`XP_PER_LEVEL`、`FOCUS_MINUTES`）が Python 側で埋め込まれ、`HTML` 変数として配信されます。
 
 ---
 
 ## HTML 構造
 
 ```
-body.mode-focus
-├── div.focus-bg          # 集中モード時の背景エフェクト (aria-hidden)
-└── main.panel            # メインパネル
-    ├── div.mode-switch   # モード切替ボタン群
-    │   ├── button#focusBtn   (Focus 25m)
-    │   └── button#breakBtn   (Break 5m)
-    ├── div.ring-wrap     # プログレスリング
-    │   ├── svg           # SVG リング (viewBox="0 0 120 120")
-    │   │   ├── circle.track      # 背景トラック (r=52)
-    │   │   └── circle.progress#progressCircle  # 進捗リング
-    │   └── div.time#timeText     # 残り時間テキスト
-    ├── div.status#statusText     # ステータスメッセージ
-    └── div.controls      # 操作ボタン群
-        ├── button#startBtn  (Start)
-        ├── button#pauseBtn  (Pause)
-        └── button#resetBtn  (Reset)
+body
+├── main
+│   ├── section.card           # セッション操作パネル
+│   │   ├── h1                 # タイトル「Pomodoro ゲーミフィケーション」
+│   │   └── div.row
+│   │       ├── button#complete-btn   # 集中セッション完了（+XP）
+│   │       └── button#attempt-btn   # セッション試行のみ（+0 XP）
+│   ├── section.card           # プロフィール
+│   │   ├── div#level-text     # レベル表示 (例: "Lv.3")
+│   │   ├── div.progress > span#level-progress  # XP進捗バー
+│   │   └── p#xp-text          # XP テキスト (例: "総XP: 250 / 次Lvまで 50 XP")
+│   ├── section.card           # ストリーク
+│   │   ├── div.streak > span#streak-days     # 現在の連続日数
+│   │   └── div > strong#max-streak-days      # 最大ストリーク日数
+│   ├── section.card           # 週間 / 月間統計
+│   │   ├── div.stats-grid#stats-grid         # 統計メトリクスグリッド
+│   │   └── div.chart#hourly-chart            # 時間帯別棒グラフ（24本）
+│   └── section.card           # バッジコレクション
+│       └── div.badge-grid#badge-grid         # バッジ一覧グリッド
+└── div#toasts                  # トースト通知（バッジ獲得時）
 ```
 
 ---
@@ -31,155 +35,160 @@ body.mode-focus
 
 ### CSS カスタムプロパティ（変数）
 
-| 変数 | 初期値 | 説明 |
-|------|--------|------|
-| `--bg` | `#0f172a` | ページ背景色 |
-| `--surface` | `rgba(15,23,42,0.78)` | パネル背景色 |
-| `--text` | `#e2e8f0` | テキスト色 |
-| `--color-calm` | `#4da3ff` | 残り時間75%超のリング色 |
-| `--color-steady` | `#47d7ac` | 残り時間50〜75%のリング色 |
-| `--color-mid` | `#ffd166` | 残り時間25〜50%のリング色 |
-| `--color-danger` | `#ff5d73` | 残り時間25%以下のリング色 |
-| `--ring-color` | `var(--color-calm)` | 現在のリング色（JS で動的更新） |
-| `--ring-size` | `min(66vw, 340px)` | リングの表示サイズ |
-| `--ring-stroke` | `14` | リングの線幅 |
+| CSS 変数 / 値 | 説明 |
+|--------------|------|
+| `color-scheme: light dark` | システムのカラーモードに対応 |
+| `background: #0f172a` | ページ背景色（ダーク） |
+| `color: #e2e8f0` | テキスト色 |
+| `.card { background: #1e293b }` | カード背景色 |
+| `button { background: #22c55e }` | メインボタン色（緑） |
+| `button.secondary { background: #64748b }` | セカンダリボタン色 |
+| `.streak { color: #f59e0b }` | ストリーク数値の色（アンバー） |
+| `.badge.unlocked { border-color: #22c55e; background: #14532d }` | 獲得済みバッジのスタイル |
+| `.toast { background: #16a34a }` | トースト通知の背景色 |
+| `.bar { background: #06b6d4 }` | 時間帯グラフの棒グラフ色 |
 
-### アニメーション
+---
 
-| アニメーション名 | 対象 | 説明 |
-|---------------|------|------|
-| `drift` | `.focus-bg::after` | ドットパターンのゆっくりした移動 |
-| `pop` | `.burst` | タイマー完了時の爆発ドット |
+## JavaScript 定数・設定
 
-### アクセシビリティ
+```javascript
+const STORAGE_KEY = 'pomodoro_gamification_v1';  // localStorage キー
+const XP_PER_FOCUS = 25;    // Pythonから埋め込まれる定数
+const XP_PER_LEVEL = 100;   // Pythonから埋め込まれる定数
+const FOCUS_MINUTES = 25;   // Pythonから埋め込まれる定数
 
-`prefers-reduced-motion: reduce` メディアクエリが適用されている場合、すべてのアニメーション・トランジションが無効化されます。
+const BADGES = [
+  { id: 'streak_3', title: '3日連続完了', description: '3日連続で集中セッションを完了' },
+  { id: 'week_10',  title: '今週10回完了', description: '過去7日で10回の完了を達成' }
+];
+```
 
 ---
 
 ## JavaScript 関数
 
-### `easeOutSine(x)`
+### `todayKey(d?)`
 
-進捗リングの描画に使用するイージング関数。
+現在日付を `"YYYY-MM-DD"` 形式の文字列で返します。
 
-```javascript
-function easeOutSine(x) { return Math.sin((x * Math.PI) / 2); }
-```
+### `parseDate(key)`
 
-| 引数 | 型 | 説明 |
-|------|----|------|
-| `x` | `number` | 0〜1 の線形進捗値 |
-| 戻り値 | `number` | イージング後の 0〜1 の値 |
+`"YYYY-MM-DD"` 文字列を `Date` オブジェクトに変換します。パース失敗時は `null` を返します。
 
-`prefers-reduced-motion` が有効な場合、イージングは適用されず線形値がそのまま使用されます。
+### `diffDays(a, b)`
 
----
+2 つの `Date` オブジェクト間の日数差（整数）を返します。
 
-### `formatTime(ms)`
+### `defaultState()`
 
-ミリ秒を `MM:SS` 形式の文字列に変換します。
+初期状態オブジェクトを返します。
 
 ```javascript
-function formatTime(ms) {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  const mm = String(Math.floor(s / 60)).padStart(2, '0');
-  const ss = String(s % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
+{
+  totalXP: 0, completed: 0, attempted: 0, totalFocusMinutes: 0,
+  history: [], streak: 0, maxStreak: 0, lastCompletionDate: null,
+  badges: [], updatedAt: ''
 }
 ```
 
-| 引数 | 型 | 説明 |
-|------|----|------|
-| `ms` | `number` | ミリ秒 |
-| 戻り値 | `string` | `"MM:SS"` 形式の文字列 |
+### `mergeState(source)`
 
----
+`defaultState()` をベースに `source` をマージして返します。欠損フィールドを補完します。
 
-### `colorByRatio(ratio)`
+### `loadState()` (async)
 
-残り時間の割合に応じた CSS カラー変数名を返します。
+1. `localStorage` からローカル状態を読み込む
+2. `GET /api/state` でサーバー状態を取得する
+3. `updatedAt` を比較し、新しい方を返す
 
-| ratio の範囲 | 戻り値 |
-|-------------|--------|
-| > 0.75 | `'var(--color-calm)'` |
-| > 0.5 | `'var(--color-steady)'` |
-| > 0.25 | `'var(--color-mid)'` |
-| ≤ 0.25 | `'var(--color-danger)'` |
+### `saveState(state)`
 
----
+1. `state.updatedAt` を現在の ISO タイムスタンプで更新
+2. `localStorage` に保存
+3. `POST /api/state` でサーバーに非同期送信（失敗は無視）
 
-### `setMode(nextMode)`
+### `refreshStreakForToday(state)`
 
-タイマーモードを切り替えます。タイマーを停止して初期状態にリセットします。
+`lastCompletionDate` と今日の日数差が 1 超の場合、`state.streak` を 0 にリセットします。
 
-| 引数 | 型 | 値 |
-|------|----|-----|
-| `nextMode` | `string` | `'focus'` または `'break'` |
+### `updateStreakOnComplete(state)`
 
-処理内容：
-1. `mode`・`total`・`remainingMs`・`baseMs` を更新
-2. 実行中のタイマーを停止 (`cancelAnimationFrame`)
-3. `body.mode-focus` クラスを切り替え
-4. ボタンの `primary` クラスを切り替え
-5. ステータステキストを更新
-6. `render()` を呼び出して UI を描画
+集中セッション完了時にストリークを更新します。`lastCompletionDate` を今日の日付に設定します。
 
----
+### `getLevel(totalXP)`
 
-### `render()`
-
-現在の `remainingMs` に基づいて UI を更新します。
-
-処理内容：
-1. `ratio = remainingMs / (total * 1000)` を計算
-2. `easeOutSine(ratio)` でイージングを適用（`reduceMotion` が false の場合）
-3. SVG プログレスリングの `strokeDashoffset` を更新
-4. `--ring-color` CSS 変数を `colorByRatio(ratio)` で更新
-5. `timeText` の表示を更新
-6. `statusText` を更新（完了時は `'完了！お疲れさまでした'`）
-
-プログレスリングの計算：
-```
-circumference = 2 * π * 52 ≈ 326.73
-strokeDashoffset = circumference * (1 - eased)
+```javascript
+// 戻り値: { level, progressXP, next }
 ```
 
----
+| 項目 | 計算式 |
+|------|--------|
+| `level` | `floor(totalXP / XP_PER_LEVEL) + 1` |
+| `progressXP` | `totalXP % XP_PER_LEVEL` |
+| `next` | `XP_PER_LEVEL`（固定値） |
 
-### `burst()`
+### `statsForDays(state, days)`
 
-タイマー完了時に26個のドットを放射状に飛ばすアニメーションを実行します。
+指定した過去日数の統計を計算して返します。
 
-`prefers-reduced-motion` が有効な場合は何もしません。
+| 戻り値フィールド | 説明 |
+|----------------|------|
+| `completionRate` | 完了率（%） |
+| `avgFocus` | 平均集中時間（分） |
+| `avgSessionsPerDay` | 1日あたり平均セッション数 |
+| `peakHour` | 最多完了の時間帯（0〜23） |
+| `hourCounts` | 各時間帯の完了セッション数（24要素配列） |
 
-| 定数 | 値 | 説明 |
-|------|----|------|
-| `BURST_DOT_COUNT` | `26` | ドット数 |
-| `MIN_BURST_DISTANCE` | `80` | 最小飛散距離（px） |
-| `BURST_DISTANCE_RANGE` | `140` | 飛散距離のランダム幅（px） |
+### `detectNewBadges(state)`
 
-使用色：`#4da3ff`、`#47d7ac`、`#ffd166`、`#ff5d73`
+解放条件を確認して新しく獲得したバッジ ID の配列を返し、`state.badges` を更新します。
 
----
+### `showToasts(ids)`
 
-### `tick(now)`
+バッジ ID の配列を受け取り、3秒後に自動消滅するトースト通知を画面右下に表示します。
 
-`requestAnimationFrame` のコールバック関数。タイマーが動作中の間、毎フレーム呼ばれます。
+### `render(state)`
 
-1. `remainingMs = baseMs - (now - startEpoch)` を計算
-2. `render()` を呼び出して UI を更新
-3. 残り時間が 0 以下になったら `burst()` を呼び出して終了
-4. それ以外は `requestAnimationFrame(tick)` で次フレームをスケジュール
+状態に基づいて UI 全体を更新します。
+
+1. レベルテキスト・XP テキスト・XP 進捗バーを更新
+2. ストリーク数値・最大ストリーク数値を更新
+3. 週間・月間の統計メトリクス（8項目）を描画
+4. 過去 30 日の時間帯別棒グラフを描画
+5. バッジコレクションを描画（獲得済みは `.unlocked` クラス付き）
+
+### `registerAttempt(state, completed)`
+
+ボタンクリック時に呼ばれます。
+
+1. `refreshStreakForToday(state)` でストリークを確認
+2. `state.attempted` をインクリメント
+3. 履歴エントリを `state.history` に追加
+4. `completed === true` の場合: XP 加算・集中時間加算・ストリーク更新
+5. `detectNewBadges(state)` でバッジを確認
+6. `saveState(state)` で保存
+7. `render(state)` で UI を更新
+8. `showToasts(newBadges)` で通知を表示
 
 ---
 
 ## ボタンイベントハンドラー
 
-| ボタン | イベント | 動作 |
-|--------|---------|------|
-| `startBtn` | `click` | タイマーを開始（`isRunning=true` かつ `remainingMs>0` の場合のみ） |
-| `pauseBtn` | `click` | タイマーを一時停止（`isRunning=false`、`cancelAnimationFrame`） |
-| `resetBtn` | `click` | `setMode(mode)` で現在モードをリセット |
-| `focusBtn` | `click` | `setMode('focus')` |
-| `breakBtn` | `click` | `setMode('break')` |
+| ボタン | ID | 動作 |
+|--------|-----|------|
+| 集中セッション完了ボタン | `complete-btn` | `registerAttempt(state, true)` |
+| セッション試行のみボタン | `attempt-btn` | `registerAttempt(state, false)` |
+
+---
+
+## 初期化フロー
+
+```javascript
+(async function init() {
+  const state = await loadState();   // サーバーまたはlocalStorageから状態をロード
+  refreshStreakForToday(state);       // 起動時にストリークを更新
+  render(state);                     // 初回描画
+  // ボタンにイベントリスナーを登録
+})();
+```
