@@ -1,0 +1,716 @@
+/**
+ * ポモドーロタイマー スタイルシート
+ * Phase 0: プロジェクト初期化
+ */
+
+:root {
+  --bg-start: #fff4dd;
+  --bg-end: #ffd5c2;
+  --panel-bg: rgba(255, 252, 247, 0.88);
+  --panel-border: rgba(187, 117, 76, 0.15);
+  --text-main: #2f241f;
+  --text-subtle: #7c665d;
+  --accent: #d4632f;
+  --accent-strong: #b94818;
+  --accent-soft: rgba(212, 99, 47, 0.16);
+  --secondary: #1f7a72;
+  --secondary-strong: #155851;
+  --track: rgba(82, 53, 39, 0.12);
+  --shadow-lg: 0 24px 80px rgba(89, 47, 27, 0.16);
+}
+
+body[data-mode="short_break"] {
+  --bg-start: #ebfff8;
+  --bg-end: #c8f1eb;
+  --panel-border: rgba(31, 122, 114, 0.16);
+  --accent: #1f7a72;
+  --accent-strong: #155851;
+  --accent-soft: rgba(31, 122, 114, 0.14);
+  --secondary: #cf6a3b;
+  --secondary-strong: #ab4f27;
+}
+
+body[data-mode="long_break"] {
+  --bg-start: #edf4ff;
+  --bg-end: #d8e5ff;
+  --panel-border: rgba(63, 95, 184, 0.14);
+  --accent: #4564c7;
+  --accent-strong: #344ea8;
+  --accent-soft: rgba(69, 100, 199, 0.14);
+  --secondary: #c9792a;
+  --secondary-strong: #9f5f1f;
+}
+
+/* ============================================
+   グローバルスタイル
+   ============================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: 'Avenir Next', 'Hiragino Sans', 'Yu Gothic', 'BIZ UDPGothic', sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.46), transparent 22%),
+    linear-gradient(145deg, var(--bg-start) 0%, var(--bg-end) 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-main);
+  line-height: 1.6;
+  padding: 24px;
+  position: relative;
+  overflow-x: hidden;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  width: 34vw;
+  height: 34vw;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  filter: blur(6px);
+  z-index: 0;
+  pointer-events: none;
+}
+
+body::before {
+  top: -10vw;
+  left: -8vw;
+}
+
+body::after {
+  right: -10vw;
+  bottom: -14vw;
+}
+
+/* ============================================
+   レイアウト
+   ============================================ */
+#app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.container {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 32px;
+  padding: 32px;
+  box-shadow: var(--shadow-lg);
+  max-width: 1120px;
+  width: 100%;
+  text-align: center;
+  animation: rise-in 0.65s ease;
+}
+
+.layout-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+.hero-panel {
+  display: grid;
+  gap: 24px;
+}
+
+.hero-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.lead-text {
+  max-width: 34rem;
+  margin: 0 auto;
+  color: var(--text-subtle);
+  font-size: 15px;
+}
+
+/* ============================================
+   タイポグラフィ
+   ============================================ */
+h1 {
+  font-size: 30px;
+  font-weight: 700;
+  margin-bottom: 0;
+  color: var(--text-main);
+  line-height: 1.15;
+}
+
+h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0;
+}
+
+/* ============================================
+   ステータスラベル
+   ============================================ */
+.session-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mode-badge,
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.mode-badge {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.status-label {
+  color: var(--text-subtle);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(124, 102, 93, 0.12);
+}
+
+/* ============================================
+   タイマー表示
+   ============================================ */
+.timer-display {
+  position: relative;
+  width: 300px;
+  height: 300px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.progress-ring {
+  transform: rotate(-90deg);
+}
+
+.progress-ring-track {
+  stroke: var(--track);
+}
+
+.progress-ring-indicator {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 12px rgba(0, 0, 0, 0.08));
+  transition: stroke-dashoffset 0.25s linear, stroke 0.3s ease;
+}
+
+.timer-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+.timer-caption {
+  font-size: 13px;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 6px;
+}
+
+.timer-text {
+  font-size: 72px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   ボタン
+   ============================================ */
+.button-group {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 8px 18px var(--accent-soft);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  box-shadow: 0 12px 22px var(--accent-soft);
+}
+
+.btn-primary:disabled {
+  background: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Secondary Button */
+.btn-secondary {
+  background: var(--secondary);
+  color: white;
+  box-shadow: 0 8px 18px rgba(31, 122, 114, 0.18);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--secondary-strong);
+  box-shadow: 0 12px 22px rgba(31, 122, 114, 0.24);
+}
+
+.btn-secondary:disabled {
+  background: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Outline Button */
+.btn-outline {
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--accent);
+  border: 2px solid rgba(212, 99, 47, 0.25);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 1);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.btn-outline:disabled {
+  border-color: #cbd5e1;
+  color: #cbd5e1;
+  background: #f7fafc;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   統計カード
+   ============================================ */
+.stats-card {
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(124, 102, 93, 0.1);
+  border-radius: 24px;
+  padding: 24px;
+  text-align: left;
+  display: grid;
+  gap: 20px;
+}
+
+.stats-header {
+  display: grid;
+  gap: 4px;
+}
+
+.stats-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.stats-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stat-item {
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(124, 102, 93, 0.08);
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-subtle);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.stats-note {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--text-main);
+}
+
+.stats-note-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.stats-note-body {
+  font-size: 14px;
+  color: var(--text-subtle);
+}
+
+.helper-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.helper-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(124, 102, 93, 0.1);
+  color: var(--text-subtle);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ============================================
+   レスポンシブ: スマートフォン (max-width: 480px)
+   ============================================ */
+@media (max-width: 480px) {
+  body {
+    padding: 14px;
+  }
+
+  .container {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .layout-shell,
+  .hero-panel {
+    gap: 18px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .lead-text {
+    font-size: 14px;
+  }
+
+  .timer-display {
+    width: 200px;
+    height: 200px;
+  }
+
+  .timer-caption {
+    font-size: 11px;
+  }
+
+  .timer-text {
+    font-size: 48px;
+  }
+
+  .button-group {
+    gap: 12px;
+  }
+
+  .btn {
+    flex: 1 1 calc(50% - 12px);
+    padding: 10px 18px;
+    font-size: 14px;
+    min-width: 48px;
+    min-height: 48px;
+  }
+
+  .stats-card {
+    padding: 16px;
+  }
+
+  .stats-content {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+}
+
+/* ============================================
+   レスポンシブ: タブレット (481px - 1024px)
+   ============================================ */
+@media (min-width: 481px) and (max-width: 1024px) {
+  .container {
+    padding: 28px;
+  }
+
+  .layout-shell,
+  .hero-panel {
+    gap: 22px;
+  }
+
+  .timer-display {
+    width: 280px;
+    height: 280px;
+  }
+
+  .timer-text {
+    font-size: 64px;
+  }
+
+  .btn {
+    padding: 12px 28px;
+    font-size: 15px;
+    min-width: 56px;
+    min-height: 56px;
+  }
+
+  .stats-card {
+    padding: 18px;
+  }
+
+  .stat-value {
+    font-size: 26px;
+  }
+}
+
+/* ============================================
+   レスポンシブ: デスクトップ (min-width: 1025px)
+   ============================================ */
+@media (min-width: 1025px) {
+  .container {
+    max-width: 1120px;
+    padding: 40px;
+  }
+
+  .layout-shell {
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+    align-items: stretch;
+    gap: 28px;
+  }
+
+  .hero-panel {
+    gap: 28px;
+    align-content: start;
+  }
+
+  h1 {
+    font-size: 44px;
+  }
+
+  .lead-text {
+    font-size: 16px;
+  }
+
+  .timer-display {
+    width: 350px;
+    height: 350px;
+  }
+
+  .timer-text {
+    font-size: 80px;
+  }
+
+  .button-group {
+    gap: 20px;
+  }
+
+  .btn {
+    padding: 14px 36px;
+    font-size: 16px;
+    min-width: 64px;
+    min-height: 64px;
+  }
+
+  .stats-card {
+    padding: 28px;
+  }
+
+  .stat-value {
+    font-size: 36px;
+  }
+
+  .stat-label {
+    font-size: 12px;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   ユーティリティ
+   ============================================ */
+.hidden {
+  display: none !important;
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+  /* ============================================
+     ダークモード対応
+     ============================================ */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-start: #1a1008;
+      --bg-end: #2c1a10;
+      --panel-bg: rgba(30, 20, 12, 0.92);
+      --panel-border: rgba(212, 99, 47, 0.2);
+      --text-main: #f5e8de;
+      --text-subtle: #b89a8c;
+      --accent: #e87a45;
+      --accent-strong: #f0945b;
+      --accent-soft: rgba(232, 122, 69, 0.22);
+      --secondary: #2aa99d;
+      --secondary-strong: #36c7ba;
+      --track: rgba(255, 220, 200, 0.1);
+      --shadow-lg: 0 24px 80px rgba(0, 0, 0, 0.5);
+    }
+
+    body[data-mode="short_break"] {
+      --bg-start: #08181a;
+      --bg-end: #0e2c2a;
+      --panel-border: rgba(42, 169, 157, 0.22);
+      --accent: #2aa99d;
+      --accent-strong: #36c7ba;
+      --accent-soft: rgba(42, 169, 157, 0.2);
+    }
+
+    body[data-mode="long_break"] {
+      --bg-start: #0c1020;
+      --bg-end: #142040;
+      --panel-border: rgba(99, 130, 220, 0.22);
+      --accent: #6382dc;
+      --accent-strong: #7a9aee;
+      --accent-soft: rgba(99, 130, 220, 0.2);
+    }
+
+    .btn-outline {
+      background: rgba(30, 20, 12, 0.78);
+      border-color: rgba(232, 122, 69, 0.32);
+    }
+
+    .btn-primary:disabled,
+    .btn-secondary:disabled {
+      background: #3a2e28;
+      color: #6b5a52;
+    }
+
+    .btn-outline:disabled {
+      border-color: #3a2e28;
+      color: #6b5a52;
+      background: transparent;
+    }
+
+    .stats-card {
+      background: rgba(20, 12, 6, 0.72);
+    }
+  }
+
+  /* ============================================
+     フォーカス視認性強化（キーボード操作）
+     ============================================ */
+  .btn:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 6px var(--accent-soft);
+  }
+
+  /* マウス操作時はデフォルトフォーカスを除去 */
+  .btn:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ============================================
+     動きを減らす設定への対応
+     ============================================ */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }

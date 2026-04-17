@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ポモドーロタイマー - 25分の集中とを助けるシンプルなタイマーアプリ">
+  <title>ポモドーロタイマー</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <div class="container">
+      <div class="layout-shell">
+        <section class="hero-panel">
+          <div class="hero-copy">
+            <p class="eyebrow">Focus Rhythm</p>
+            <h1 class="app-title">ポモドーロタイマー</h1>
+            <p class="lead-text">25分の集中と5分の休憩を、いまの状態がひと目で分かる形に整えています。</p>
+          </div>
+
+          <div class="session-meta">
+            <div class="mode-badge" id="mode-badge" role="status" aria-live="polite">集中モード</div>
+            <div class="status-label" id="status" role="status" aria-live="polite">未開始</div>
+          </div>
+
+          <div class="timer-display" role="timer" aria-label="タイマー表示">
+            <svg class="progress-ring" width="300" height="300" viewBox="0 0 300 300" aria-hidden="true" focusable="false">
+              <circle class="progress-ring-track" cx="150" cy="150" r="130" fill="none" stroke-width="20"/>
+              <circle 
+                id="progress-ring" 
+                class="progress-ring-indicator"
+                cx="150" 
+                cy="150" 
+                r="130" 
+                fill="none" 
+                stroke-width="20"
+                stroke-dasharray="816.81" 
+                stroke-dashoffset="816.81"
+              />
+            </svg>
+            <div class="timer-center">
+              <div class="timer-caption" id="timer-caption" aria-hidden="true">次の25分に集中</div>
+              <div class="timer-text" id="timer" aria-label="残り時間 25分00秒" aria-atomic="true">25:00</div>
+            </div>
+          </div>
+
+          <div class="button-group" role="group" aria-label="タイマー操作">
+            <button id="start-btn" class="btn btn-primary" aria-label="タイマーを開始">開始</button>
+            <button id="pause-btn" class="btn btn-secondary" style="display: none;" aria-label="タイマーを一時停止">停止</button>
+            <button id="resume-btn" class="btn btn-secondary" style="display: none;" aria-label="タイマーを再開">再開</button>
+            <button id="reset-btn" class="btn btn-outline" aria-label="タイマーをリセット">リセット</button>
+          </div>
+
+          <div class="helper-strip">
+            <span class="helper-pill">Spaceを切る感覚で1区切り</span>
+            <span class="helper-pill">完了時は通知と音でお知らせ</span>
+          </div>
+        </section>
+
+        <aside class="stats-card">
+          <div class="stats-header">
+            <p class="stats-kicker">Today</p>
+            <h2>今日の進捗</h2>
+          </div>
+
+          <div class="stats-content">
+            <div class="stat-item">
+              <div class="stat-value" id="session-count" aria-label="完了セッション数">0</div>
+              <div class="stat-label" aria-hidden="true">完了</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="focus-time" aria-label="今日の集中時間">0:00</div>
+              <div class="stat-label" aria-hidden="true">集中時間</div>
+            </div>
+          </div>
+
+          <div class="stats-note">
+            <p class="stats-note-title">確認ポイント</p>
+            <p class="stats-note-body">focus セッション完了時に完了数と集中時間が増え、再読込後も保持されます。</p>
+          </div>
+        </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript読み込み -->
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
