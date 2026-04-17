@@ -25,3 +25,6 @@ Thumbs.db
 
 # Flask
 instance/
+
+# Pomodoro local state
+1.pomodoro/pomodoro_state.json
