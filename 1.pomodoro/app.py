@@ -310,8 +310,8 @@ HTML_TEMPLATE = """<!doctype html>
       const unlocked = new Set(state.badges || []);
       const newOnes = [];
       if (state.streak >= 3 && !unlocked.has('streak_3')) newOnes.push('streak_3');
-      const completedSessionsThisWeek = statsForDays(state, 7).hourCounts.reduce((a, b) => a + b, 0);
-      if (completedSessionsThisWeek >= 10 && !unlocked.has('week_10')) newOnes.push('week_10');
+      const completedSessionsLast7Days = statsForDays(state, 7).hourCounts.reduce((a, b) => a + b, 0);
+      if (completedSessionsLast7Days >= 10 && !unlocked.has('week_10')) newOnes.push('week_10');
 
       if (newOnes.length) {
         state.badges = [...unlocked, ...newOnes];
