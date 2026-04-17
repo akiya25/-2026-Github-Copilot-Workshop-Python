@@ -284,7 +284,7 @@ HTML_TEMPLATE = """<!doctype html>
 
     function statsForDays(state, days) {
       const now = new Date();
-      const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+      const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
       const items = state.history.filter(h => new Date(h.ts) >= cutoff);
       const attempted = items.length;
       const completedItems = items.filter(h => h.completed);
@@ -310,8 +310,8 @@ HTML_TEMPLATE = """<!doctype html>
       const unlocked = new Set(state.badges || []);
       const newOnes = [];
       if (state.streak >= 3 && !unlocked.has('streak_3')) newOnes.push('streak_3');
-      const weekCompleted = statsForDays(state, 7).hourCounts.reduce((a, b) => a + b, 0);
-      if (weekCompleted >= 10 && !unlocked.has('week_10')) newOnes.push('week_10');
+      const completedSessionsThisWeek = statsForDays(state, 7).hourCounts.reduce((a, b) => a + b, 0);
+      if (completedSessionsThisWeek >= 10 && !unlocked.has('week_10')) newOnes.push('week_10');
 
       if (newOnes.length) {
         state.badges = [...unlocked, ...newOnes];
