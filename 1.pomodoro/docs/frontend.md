@@ -1,194 +1,291 @@
-# フロントエンドドキュメント
+# フロントエンドモジュール仕様
 
-フロントエンドのコード（HTML / CSS / JavaScript）はすべて `app.py` の `HTML_TEMPLATE` 文字列にインラインで記述されています。外部ファイルや外部ライブラリへの依存はありません。起動時に定数（`XP_PER_FOCUS`、`XP_PER_LEVEL`、`FOCUS_MINUTES`）が Python 側で埋め込まれ、`HTML` 変数として配信されます。
+`static/js/` 配下の JavaScript モジュールと UI コンポーネントの仕様です。
 
 ---
 
-## HTML 構造
+## ディレクトリ構成
 
 ```
-body
-├── main
-│   ├── section.card           # セッション操作パネル
-│   │   ├── h1                 # タイトル「Pomodoro ゲーミフィケーション」
-│   │   └── div.row
-│   │       ├── button#complete-btn   # 集中セッション完了（+XP）
-│   │       └── button#attempt-btn   # セッション試行のみ（+0 XP）
-│   ├── section.card           # プロフィール
-│   │   ├── div#level-text     # レベル表示 (例: "Lv.3")
-│   │   ├── div.progress > span#level-progress  # XP進捗バー
-│   │   └── p#xp-text          # XP テキスト (例: "総XP: 250 / 次Lvまで 50 XP")
-│   ├── section.card           # ストリーク
-│   │   ├── div.streak > span#streak-days     # 現在の連続日数
-│   │   └── div > strong#max-streak-days      # 最大ストリーク日数
-│   ├── section.card           # 週間 / 月間統計
-│   │   ├── div.stats-grid#stats-grid         # 統計メトリクスグリッド
-│   │   └── div.chart#hourly-chart            # 時間帯別棒グラフ（24本）
-│   └── section.card           # バッジコレクション
-│       └── div.badge-grid#badge-grid         # バッジ一覧グリッド
-└── div#toasts                  # トースト通知（バッジ獲得時）
+static/js/
+├── app.js                      # メインエントリポイント（TimerApp クラス）
+├── domain/
+│   ├── constants.js            # 定数・型定義
+│   ├── timerReducer.js         # 状態管理（Reducer）
+│   └── timeCalc.js             # 時間計算エンジン
+├── infrastructure/
+│   ├── apiClient.js            # Flask API クライアント
+│   ├── notifier.js             # 通知機能
+│   └── sessionRepository.js   # localStorage 永続化
+└── presentation/
+    ├── presenter.js            # 表示データ変換（純粋関数）
+    └── view.js                 # DOM 操作（View クラス）
 ```
 
 ---
 
-## CSS コンポーネント
+## app.js — TimerApp クラス
 
-### CSS カスタムプロパティ（変数）
+アプリケーションのメインクラスです。全モジュールを統合し、タイマーの動作を制御します。
 
-| CSS 変数 / 値 | 説明 |
-|--------------|------|
-| `color-scheme: light dark` | システムのカラーモードに対応 |
-| `background: #0f172a` | ページ背景色（ダーク） |
-| `color: #e2e8f0` | テキスト色 |
-| `.card { background: #1e293b }` | カード背景色 |
-| `button { background: #22c55e }` | メインボタン色（緑） |
-| `button.secondary { background: #64748b }` | セカンダリボタン色 |
-| `.streak { color: #f59e0b }` | ストリーク数値の色（アンバー） |
-| `.badge.unlocked { border-color: #22c55e; background: #14532d }` | 獲得済みバッジのスタイル |
-| `.toast { background: #16a34a }` | トースト通知の背景色 |
-| `.bar { background: #06b6d4 }` | 時間帯グラフの棒グラフ色 |
+### 初期化処理
+
+1. `sessionRepository.getTodayStats()` で localStorage から統計を復元
+2. `requestNotificationPermission()` でブラウザ通知パーミッションを要求
+3. `setupUI()` → `view.ensurePauseButton()` / `view.ensureResumeButton()` でボタンを準備
+4. `setupEventListeners()` でイベントリスナーをセットアップ
+5. `render()` で初期画面を描画
+6. `syncStatsFromServer()` でサーバーと localStorage の差分を同期
+
+### 主なメソッド
+
+| メソッド | 説明 |
+|---|---|
+| `setupUI()` | `ensurePauseButton()` / `ensureResumeButton()` を呼び出してボタンを準備 |
+| `setupEventListeners()` | 各ボタンにクリックイベントリスナーを登録 |
+| `start()` | タイマー開始。`idle` または `finished` 状態の場合のみ実行 |
+| `pause()` | タイマー一時停止 |
+| `resume()` | タイマー再開 |
+| `reset()` | タイマーをリセット（初期状態に戻す） |
+| `tick()` | `requestAnimationFrame` で毎フレーム呼ばれる更新処理 |
+| `onSessionComplete(mode)` | セッション完了時の処理（通知・localStorage・API 同期） |
+| `render()` | 画面全体を現在の状態で更新 |
+| `updateButtonLabels()` | 開始ボタンのテキストを状態に応じて動的更新（`finished` 時は「次を開始」） |
+| `getModeCaption()` | 現在のモード・状態に応じた補助テキストを返す |
+| `syncStatsFromServer()` | 起動時にサーバー統計と localStorage を同期 |
+| `syncCompletedFocusSession(completedAt)` | focus 完了時にサーバーへセッションを送信し統計を更新 |
+| `updateDailyStats(stats)` | `dailyStats` を更新し `render()` を呼び出す |
 
 ---
 
-## JavaScript 定数・設定
+## domain/timerReducer.js — 状態管理
 
-```javascript
-const STORAGE_KEY = 'pomodoro_gamification_v1';  // localStorage キー
-const XP_PER_FOCUS = 25;    // Pythonから埋め込まれる定数
-const XP_PER_LEVEL = 100;   // Pythonから埋め込まれる定数
-const FOCUS_MINUTES = 25;   // Pythonから埋め込まれる定数
+`(state, action) => newState` の純粋関数です。
 
-const BADGES = [
-  { id: 'streak_3', title: '3日連続完了', description: '3日連続で集中セッションを完了' },
-  { id: 'week_10',  title: '今週10回完了', description: '過去7日で10回の完了を達成' }
-];
-```
-
----
-
-## JavaScript 関数
-
-### `todayKey(d?)`
-
-現在日付を `"YYYY-MM-DD"` 形式の文字列で返します。
-
-### `parseDate(key)`
-
-`"YYYY-MM-DD"` 文字列を `Date` オブジェクトに変換します。パース失敗時は `null` を返します。
-
-### `diffDays(a, b)`
-
-2 つの `Date` オブジェクト間の日数差（整数）を返します。
-
-### `defaultState()`
-
-初期状態オブジェクトを返します。
+### initialState
 
 ```javascript
 {
-  totalXP: 0, completed: 0, attempted: 0, totalFocusMinutes: 0,
-  history: [], streak: 0, maxStreak: 0, lastCompletionDate: null,
-  badges: [], updatedAt: ''
+  status: 'idle',
+  mode: 'focus',
+  currentTime: 1500,  // 25分（秒）
+  targetTime: null,
+  totalSessions: 0
 }
 ```
 
-### `mergeState(source)`
+### timerReducer(state, action)
 
-`defaultState()` をベースに `source` をマージして返します。欠損フィールドを補完します。
+各アクションの `now` プロパティは `Date.now() / 1000`（UNIX timestamp 秒）です。
 
-### `loadState()` (async)
-
-1. `localStorage` からローカル状態を読み込む
-2. `GET /api/state` でサーバー状態を取得する
-3. `updatedAt` を比較し、新しい方を返す
-
-### `saveState(state)`
-
-1. `state.updatedAt` を現在の ISO タイムスタンプで更新
-2. `localStorage` に保存
-3. `POST /api/state` でサーバーに非同期送信（失敗は無視）
-
-### `refreshStreakForToday(state)`
-
-`lastCompletionDate` と今日の日数差が 1 超の場合、`state.streak` を 0 にリセットします。
-
-### `updateStreakOnComplete(state)`
-
-集中セッション完了時にストリークを更新します。`lastCompletionDate` を今日の日付に設定します。
-
-### `getLevel(totalXP)`
-
-```javascript
-// 戻り値: { level, progressXP, next }
-```
-
-| 項目 | 計算式 |
-|------|--------|
-| `level` | `floor(totalXP / XP_PER_LEVEL) + 1` |
-| `progressXP` | `totalXP % XP_PER_LEVEL` |
-| `next` | `XP_PER_LEVEL`（固定値） |
-
-### `statsForDays(state, days)`
-
-指定した過去日数の統計を計算して返します。
-
-| 戻り値フィールド | 説明 |
-|----------------|------|
-| `completionRate` | 完了率（%） |
-| `avgFocus` | 平均集中時間（分） |
-| `avgSessionsPerDay` | 1日あたり平均セッション数 |
-| `peakHour` | 最多完了の時間帯（0〜23） |
-| `hourCounts` | 各時間帯の完了セッション数（24要素配列） |
-
-### `detectNewBadges(state)`
-
-解放条件を確認して新しく獲得したバッジ ID の配列を返し、`state.badges` を更新します。
-
-### `showToasts(ids)`
-
-バッジ ID の配列を受け取り、3秒後に自動消滅するトースト通知を画面右下に表示します。
-
-### `render(state)`
-
-状態に基づいて UI 全体を更新します。
-
-1. レベルテキスト・XP テキスト・XP 進捗バーを更新
-2. ストリーク数値・最大ストリーク数値を更新
-3. 週間・月間の統計メトリクス（8項目）を描画
-4. 過去 30 日の時間帯別棒グラフを描画
-5. バッジコレクションを描画（獲得済みは `.unlocked` クラス付き）
-
-### `registerAttempt(state, completed)`
-
-ボタンクリック時に呼ばれます。
-
-1. `refreshStreakForToday(state)` でストリークを確認
-2. `state.attempted` をインクリメント
-3. 履歴エントリを `state.history` に追加
-4. `completed === true` の場合: XP 加算・集中時間加算・ストリーク更新
-5. `detectNewBadges(state)` でバッジを確認
-6. `saveState(state)` で保存
-7. `render(state)` で UI を更新
-8. `showToasts(newBadges)` で通知を表示
+| アクション | 処理内容 |
+|---|---|
+| `START` | `targetTime = now + currentTime` を設定し `running` へ遷移 |
+| `PAUSE` | `running` 状態のみ `paused` へ遷移 |
+| `RESUME` | `paused` 状態のみ `targetTime` を再設定し `running` へ遷移 |
+| `RESET` | `initialState` に完全リセット |
+| `TICK` | `currentTime = max(0, targetTime - now)` を更新（ドリフト対応） |
+| `COMPLETE` | `finished` へ遷移。次のモードへ自動切替（`focus→short_break→focus`）。focus 完了時に `totalSessions` をインクリメント |
 
 ---
 
-## ボタンイベントハンドラー
+## domain/timeCalc.js — 時間計算エンジン
 
-| ボタン | ID | 動作 |
-|--------|-----|------|
-| 集中セッション完了ボタン | `complete-btn` | `registerAttempt(state, true)` |
-| セッション試行のみボタン | `attempt-btn` | `registerAttempt(state, false)` |
+| 関数 | シグネチャ | 説明 |
+|---|---|---|
+| `formatTime` | `(seconds: number) => string` | 秒数を `"mm:ss"` 形式に変換。`Math.ceil` で切り上げ |
+| `calculateProgress` | `(remaining: number, total: number) => number` | 残り時間から進捗率（0〜100）を計算 |
+| `calculateRemaining` | `(targetTime: number) => number` | `targetTime - Date.now()/1000` で残り時間を計算（負数は 0） |
+| `calculateSvgProgress` | `(progress: number, radius?: number) => object` | SVG 円形プログレス用の `{ dashArray, dashOffset }` を返す |
+
+**`formatTime` 例**
+
+```javascript
+formatTime(1500)  // "25:00"
+formatTime(75)    // "01:15"
+formatTime(0)     // "00:00"
+```
+
+**`calculateProgress` 例**
+
+```javascript
+calculateProgress(1500, 1500)  // 0   (開始直後)
+calculateProgress(750, 1500)   // 50  (中間)
+calculateProgress(0, 1500)     // 100 (完了)
+```
 
 ---
 
-## 初期化フロー
+## presentation/presenter.js — 表示データ変換
+
+状態オブジェクトを UI 表示用データへ変換する純粋関数群です。
+
+| 関数 | シグネチャ | 説明 |
+|---|---|---|
+| `renderTime` | `(seconds: number) => string` | `formatTime` のラッパー |
+| `renderProgressRing` | `(remaining: number, total: number) => object` | SVG 進捗リング用パラメータを返す |
+| `renderStatus` | `(status: string, mode: string) => string` | 状態＋モードを日本語テキストに変換 |
+| `renderDailyStats` | `(completed: number, focusMinutes: number) => object` | 表示用統計データを返す |
+| `renderButtonStates` | `(status: string) => object` | 各ボタンの有効/無効フラグを返す |
+
+**`renderStatus` のマッピング**
+
+| status + mode | 表示テキスト |
+|---|---|
+| `idle` | 未開始 |
+| `running_focus` | 作業中 |
+| `running_short_break` | 短休憩中 |
+| `running_long_break` | 長休憩中 |
+| `paused_focus` | 一時停止中（作業） |
+| `paused_short_break` | 一時停止中（休憩） |
+| `paused_long_break` | 一時停止中（長休憩） |
+| `finished_focus` | 作業完了 |
+| `finished_short_break` | 休憩完了 |
+| `finished_long_break` | 長休憩完了 |
+
+**`renderButtonStates` の返却値**
 
 ```javascript
-(async function init() {
-  const state = await loadState();   // サーバーまたはlocalStorageから状態をロード
-  refreshStreakForToday(state);       // 起動時にストリークを更新
-  render(state);                     // 初回描画
-  // ボタンにイベントリスナーを登録
-})();
+{
+  startBtn: status === 'idle' || status === 'finished',
+  pauseBtn: status === 'running',
+  resumeBtn: status === 'paused',
+  resetBtn: status !== 'idle'
+}
 ```
+
+**`renderDailyStats` の返却値**
+
+```javascript
+{
+  completedSessions: number,   // 完了セッション数
+  focusTimeDisplay: string     // 集中時間（60分未満は "分" のみ、60分以上は "h:mm" 形式）
+}
+```
+
+---
+
+## presentation/view.js — View クラス
+
+DOM 操作のみを担当するクラスです。ビジネスロジックを持ちません。
+
+| メソッド | 対象要素 | 説明 |
+|---|---|---|
+| `updateTimer(timeString)` | `#timer` | タイマー時間表示を更新 |
+| `updateProgressRing(ringData)` | `#progress-ring` | SVG の `stroke-dashoffset` を更新 |
+| `updateStatus(statusText)` | `#status` | ステータスラベルを更新 |
+| `updateMode(modeLabel, caption)` | `#mode-badge`, `#timer-caption` | モード表示・補助テキストを更新 |
+| `updateThemeMode(mode)` | `body[data-mode]` | CSS テーマ切替のための `data-mode` 属性を更新 |
+| `updateStats(statsData)` | `#session-count`, `#focus-time` | 統計情報を更新 |
+| `updateButtonStates(btnStates)` | 各ボタン | `disabled` 属性と表示/非表示を更新 |
+| `updatePageTitle(title)` | `document.title` | ページタイトルを更新 |
+| `setFaviconBlinking()` | `document.title` | 5 秒間タイトルを点滅させる（フォールバック通知） |
+| `ensurePauseButton()` | `.button-group` | `#pause-btn` が存在しない場合に動的に追加 |
+| `ensureResumeButton()` | `.button-group` | `#resume-btn` が存在しない場合に動的に追加 |
+
+---
+
+## infrastructure/apiClient.js — ApiClient クラス
+
+Flask バックエンド API との通信を担当します。
+
+| メソッド | HTTP | エンドポイント | 説明 |
+|---|---|---|---|
+| `getStatsToday()` | GET | `/api/stats/today` | 当日統計を取得 |
+| `createSession(mode, duration, completedAt)` | POST | `/api/sessions` | セッションを記録 |
+| `resetToday()` | POST | `/api/reset-today` | 当日データをリセット |
+
+すべてのメソッドは `async` で、レスポンスが `ok` でない場合は `Error` をスローします。
+
+---
+
+## infrastructure/sessionRepository.js — SessionRepository クラス
+
+localStorage を使った当日セッションの永続化を担当します。
+
+| メソッド | 説明 |
+|---|---|
+| `getTodayStats()` | 当日の統計（`completedSessions`・`focusMinutes`）を返す |
+| `getTodayRecord()` | 当日のレコードを返す。日付が変わっていたら空レコードにリセット |
+| `recordCompletedFocusSession(completedAt?)` | focus セッション完了を記録し、更新後の統計を返す |
+| `clearTodayStats()` | 当日データをクリアし、空の統計を返す |
+
+**コンストラクタ**
+
+```javascript
+new SessionRepository(
+  storage = globalThis.localStorage,
+  nowProvider = () => new Date()
+)
+```
+
+テスト時は `storage` と `nowProvider` をモックに差し替えられます。
+
+---
+
+## infrastructure/notifier.js — 通知機能
+
+| 関数 | 説明 |
+|---|---|
+| `requestNotificationPermission()` | Notification API のパーミッションをリクエスト（`async`、`boolean` を返す） |
+| `showNotification(title, options?)` | ブラウザ通知を表示。パーミッションがない場合は `null` を返す |
+| `playBeepSound(volume?, frequency?, duration?)` | Web Audio API でビープ音を生成（デフォルト: 0.3, 440Hz, 0.5秒） |
+| `notifyCompletion(mode)` | モードに応じたブラウザ通知＋サウンド＋フォールバック（`setFaviconBlinking` + `updatePageTitleNotification`）を実行 |
+| `notifyCompletionFull(mode)` | `playBeepSound` を呼び出した後、`notifyCompletion` を呼び出し（音が計2回鳴る）、さらに `vibrateDevice` でスマートフォン振動を実行 |
+| `setFaviconBlinking()` | 5 秒間（500ms × 10 回）タイトルに `"✓ "` を点滅 |
+| `updatePageTitleNotification(title)` | 3 秒間タイトルを `"📢 {title}"` に更新 |
+| `vibrateDevice(pattern?)` | Vibration API で振動（デフォルト: `[200, 100, 200]`） |
+
+**通知メッセージ**
+
+| mode | 通知タイトル | 通知本文 |
+|---|---|---|
+| `focus` | ポモドーロタイマー | 作業セッションが終了しました。休憩を始めてください。 |
+| `short_break` | ポモドーロタイマー | 休憩時間が終了しました。次のセッションを開始してください。 |
+| `long_break` | ポモドーロタイマー | 長休憩が終了しました。準備はいいですか？ |
+
+---
+
+## HTML テンプレート（templates/index.html）
+
+### 主要 DOM 要素
+
+| 要素 ID / セレクタ | 説明 |
+|---|---|
+| `#mode-badge` | 現在のモード表示（例: 「集中モード」「短休憩」） |
+| `#status` | ステータスラベル（例: 「作業中」「一時停止中」） |
+| `#timer-caption` | タイマー補助テキスト（例: 「次の25分に集中」） |
+| `#timer` | タイマー時間表示（例: 「25:00」） |
+| `#progress-ring` | SVG 円形プログレスインジケーター |
+| `#start-btn` | 開始ボタン（`finished` 状態では「次を開始」に変わる） |
+| `#pause-btn` | 停止ボタン（HTML に初期配置済み。実行中のみ表示） |
+| `#resume-btn` | 再開ボタン（HTML に初期配置済み。一時停止中のみ表示） |
+| `#reset-btn` | リセットボタン（`idle` 以外で有効） |
+| `#session-count` | 当日完了セッション数 |
+| `#focus-time` | 当日集中時間 |
+| `.button-group` | ボタンのコンテナ |
+| `body[data-mode]` | CSS テーマ切替用属性（`focus` / `short_break` / `long_break`） |
+
+---
+
+## CSS テーマ（static/css/styles.css）
+
+CSS カスタムプロパティ（変数）でテーマを管理します。`body[data-mode]` 属性で自動切替されます。
+
+### ライトモード
+
+| モード | 背景グラデーション | アクセント色 |
+|---|---|---|
+| `focus`（デフォルト） | 暖色系（`#fff4dd` → `#ffd5c2`） | オレンジ（`#d4632f`） |
+| `short_break` | 緑系（`#ebfff8` → `#c8f1eb`） | グリーン（`#1f7a72`） |
+| `long_break` | 青系（`#edf4ff` → `#d8e5ff`） | ブルー（`#4564c7`） |
+
+### ダークモード（`@media (prefers-color-scheme: dark)`）
+
+OS のカラースキームが `dark` の場合、各モードの配色が自動的に切り替わります。
+
+| モード | 背景グラデーション | アクセント色 |
+|---|---|---|
+| `focus`（デフォルト） | 暗い暖色系（`#1a1008` → `#2c1a10`） | オレンジ（`#e87a45`） |
+| `short_break` | 暗い緑系（`#08181a` → `#0e2c2a`） | グリーン（`#2aa99d`） |
+| `long_break` | 暗い青系（`#0c1020` → `#142040`） | ブルー（`#6382dc`） |

@@ -1,129 +1,142 @@
 # API リファレンス
 
+ポモドーロタイマー Flask バックエンドの REST API 仕様です。
+
+---
+
+## ベース URL
+
+```
+http://localhost:5000
+```
+
+---
+
 ## エンドポイント一覧
 
-Pomodoro ゲーミフィケーションアプリは以下の HTTP エンドポイントを提供します。
+### GET /
+
+タイマー UI 画面（HTML）を返します。
+
+**レスポンス**
+
+- ステータス: `200 OK`
+- Content-Type: `text/html`
+- テンプレート: `templates/index.html`
 
 ---
 
-### `GET /`
+### GET /api/stats/today
 
-ポモドーロゲーミフィケーションの Web ページを返します。
+当日の集計統計を返します。
 
-#### リクエスト
+**レスポンス**
 
-```
-GET / HTTP/1.1
-Host: 127.0.0.1:8000
-```
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `completedSessions` | integer | 当日完了した focus セッション数 |
+| `focusMinutes` | integer | 当日の合計集中時間（分） |
+| `lastUpdatedAt` | string | 最後のセッションの `completedAt`（ISO 8601 UTC）。セッションが0件の場合は現在時刻 |
 
-パラメーター・リクエストボディは不要です。
-
-#### レスポンス
-
-| 項目 | 値 |
-|------|-----|
-| ステータスコード | `200 OK` |
-| `Content-Type` | `text/html; charset=utf-8` |
-| ボディ | 自己完結型 HTML ページ |
-
-HTML ページには CSS・JavaScript がすべてインラインで含まれており、追加のリソース取得は発生しません。
-
----
-
-### `GET /api/state`
-
-サーバーに保存されている現在のゲーミフィケーション状態を JSON で返します。
-
-#### リクエスト
-
-```
-GET /api/state HTTP/1.1
-Host: 127.0.0.1:8000
-```
-
-#### レスポンス
-
-| 項目 | 値 |
-|------|-----|
-| ステータスコード | `200 OK` |
-| `Content-Type` | `application/json; charset=utf-8` |
-| ボディ | JSON オブジェクト（状態データ） |
-
-#### レスポンス例
+**レスポンス例**
 
 ```json
 {
-  "totalXP": 275,
-  "completed": 11,
-  "attempted": 13,
-  "totalFocusMinutes": 275,
-  "history": [
-    { "ts": "2026-04-17T09:00:00.000Z", "completed": true, "focusMinutes": 25 }
-  ],
-  "streak": 3,
-  "maxStreak": 5,
-  "lastCompletionDate": "2026-04-17",
-  "badges": ["streak_3"],
-  "updatedAt": "2026-04-17T09:00:00.000000Z"
+  "completedSessions": 3,
+  "focusMinutes": 75,
+  "lastUpdatedAt": "2026-04-17T10:30:00Z"
 }
 ```
 
-状態ファイル（`pomodoro_state.json`）が存在しない場合は `{"updatedAt": ""}` を返します。
+- ステータス: `200 OK`
 
 ---
 
-### `POST /api/state`
+### POST /api/sessions
 
-ゲーミフィケーション状態をサーバーに保存します。
+セッションを記録します。
 
-#### リクエスト
+**リクエストボディ（JSON）**
 
-```
-POST /api/state HTTP/1.1
-Host: 127.0.0.1:8000
-Content-Type: application/json
-```
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `mode` | string | ✓ | タイマーモード。`focus` / `short_break` / `long_break` のいずれか |
+| `duration` | integer | ✓ | セッション時間（秒）。60〜3600 の範囲 |
+| `completed` | boolean | - | 完了フラグ（省略時は `true`） |
+| `completedAt` | string | - | 完了時刻（ISO 8601 UTC）。省略時はサーバー現在時刻 |
 
-リクエストボディには状態オブジェクト（JSON）を指定します。サーバーは受信時に `updatedAt` フィールドを現在の UTC 時刻で上書きして保存します。
-
-#### リクエスト例
+**リクエスト例**
 
 ```json
 {
-  "totalXP": 300,
-  "completed": 12,
-  "attempted": 14,
-  "totalFocusMinutes": 300,
-  "history": [],
-  "streak": 4,
-  "maxStreak": 5,
-  "lastCompletionDate": "2026-04-17",
-  "badges": ["streak_3"]
+  "mode": "focus",
+  "duration": 1500,
+  "completed": true,
+  "completedAt": "2026-04-17T09:00:00Z"
 }
 ```
 
-#### レスポンス
+**レスポンス（成功）**
 
-| 条件 | ステータスコード |
-|------|----------------|
-| 正常保存 | `204 No Content` |
-| JSON パースエラー / オブジェクト以外 | `400 Bad Request` |
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `id` | integer | 当日セッション内の連番 ID |
+| `mode` | string | 指定したモード |
+| `duration` | integer | 指定した時間（秒） |
+| `completed` | boolean | 完了フラグ |
+| `completedAt` | string | 完了時刻（ISO 8601 UTC） |
+
+```json
+{
+  "id": 1,
+  "mode": "focus",
+  "duration": 1500,
+  "completed": true,
+  "completedAt": "2026-04-17T09:00:00Z"
+}
+```
+
+- ステータス: `201 Created`
+
+**エラーレスポンス**
+
+| 条件 | ステータス | ボディ |
+|---|---|---|
+| `mode` が不正（または未指定） | `400 Bad Request` | `{"error": "Invalid mode"}` |
+| `duration` が 60〜3600 範囲外（または非整数） | `400 Bad Request` | `{"error": "Invalid duration"}` |
 
 ---
 
-## エラーレスポンス
+### POST /api/reset-today
 
-存在しないパスへのリクエストは `404 Not Found` を返します（ボディなし）。
+当日のセッションデータをすべて削除します。
+
+**リクエストボディ**: 不要
+
+**レスポンス**
+
+```json
+{
+  "status": "reset",
+  "stats": {
+    "completedSessions": 0,
+    "focusMinutes": 0,
+    "lastUpdatedAt": "2026-04-17T10:00:00Z"
+  }
+}
+```
+
+- ステータス: `200 OK`
 
 ---
 
-## サーバー設定
+## バリデーションルール
 
-| 設定項目 | 値 |
-|--------|-----|
-| バインドアドレス | `127.0.0.1` |
-| デフォルトポート | `8000` |
-| プロトコル | HTTP/1.0 |
+| 項目 | ルール |
+|---|---|
+| `mode` | `focus`、`short_break`、`long_break` のみ許可 |
+| `duration` | 整数かつ 60〜3600 秒の範囲 |
 
-`run_server(port)` 関数の引数でポート番号を変更できます。
+## データ保存
+
+現在の実装では、セッションデータはサーバーのメモリ内（`sessions_db` 辞書）に保存されます。サーバー再起動時にデータは失われます。日付（`YYYY-MM-DD`）をキーとして当日のセッション一覧を保持します。
