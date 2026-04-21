@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copilot Chat - Full Test</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: #0d1117;
+            color: #e6edf3;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+        }
+        
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .status {
+            font-size: 0.875rem;
+            padding: 4px 12px;
+            border-radius: 12px;
+            background: #21262d;
+        }
+        
+        .status.connected { color: #3fb950; }
+        .status.disconnected { color: #f85149; }
+        
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #8b949e;
+        }
+        
+        .input-area {
+            display: flex;
+            gap: 12px;
+            padding: 16px 24px;
+            background: #161b22;
+            border-top: 1px solid #30363d;
+            align-items: flex-end;
+        }
+        
+        textarea {
+            flex: 1;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            color: #e6edf3;
+            padding: 10px 14px;
+            font-size: 0.9375rem;
+            font-family: inherit;
+            resize: none;
+            outline: none;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: #238636;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        
+        button:hover { background: #2ea043; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <h1>🤖 Copilot Chat</h1>
+            <span class="status disconnected" id="status">● 切断中</span>
+        </header>
+        
+        <div class="messages">
+            <div class="empty-state">
+                <p>GitHub Copilot に何でも聞いてみましょう！</p>
+            </div>
+        </div>
+        
+        <div class="input-area">
+            <textarea placeholder="メッセージを入力..." rows="3"></textarea>
+            <button>送信</button>
+        </div>
+    </div>
+
+    <script>
+        console.log("✨ ページロード完了");
+        console.log("🔌 WebSocket テスト開始");
+        
+        const ws = new WebSocket(`ws://${window.location.hostname}:3001`);
+        const statusElement = document.getElementById('status');
+        
+        ws.onopen = () => {
+            console.log("✅ WebSocket 接続成功");
+            statusElement.textContent = "● 接続中";
+            statusElement.className = "status connected";
+        };
+        
+        ws.onclose = () => {
+            console.log("❌ WebSocket 切断");
+            statusElement.textContent = "● 切断中";
+            statusElement.className = "status disconnected";
+        };
+        
+        ws.onerror = (err) => {
+            console.error("❌ WebSocket エラー:", err);
+        };
+    </script>
+</body>
+</html>
