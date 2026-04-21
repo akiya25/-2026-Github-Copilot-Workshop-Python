@@ -4,17 +4,24 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@github/copilot-sdk": "latest",
     "express": "^4.18.0",
+    "uuid": "^14.0.0",
     "ws": "^8.17.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
-    "@types/ws": "^8.5.10",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0"
   }
