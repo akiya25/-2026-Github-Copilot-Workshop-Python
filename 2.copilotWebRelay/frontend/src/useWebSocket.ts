@@ -31,6 +31,7 @@ export function useWebSocket(
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const handlersRef = useRef<Handlers>({ onDelta, onDone, onError });
+  const isInitialConnectionRef = useRef(true);
 
   // handlersRef を常に最新に保つ（依存関係の外）
   useEffect(() => {
@@ -61,6 +62,7 @@ export function useWebSocket(
         console.log("✅ WebSocket に接続しました");
       }
       setIsConnected(true);
+      isInitialConnectionRef.current = false;
 
       // ハートビート開始（30秒ごと）
       heartbeatTimerRef.current = setInterval(() => {
@@ -92,7 +94,10 @@ export function useWebSocket(
       if (process.env.NODE_ENV === "development") {
         console.error("❌ WebSocket エラー:", err);
       }
-      handlersRef.current.onError("WebSocket connection error");
+      // 初回接続時のエラーは無視（自動的に再接続される）
+      if (!isInitialConnectionRef.current) {
+        handlersRef.current.onError("WebSocket connection error");
+      }
     };
 
     ws.onmessage = (event) => {

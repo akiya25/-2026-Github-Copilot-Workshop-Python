@@ -3,6 +3,7 @@
  * モジュール分割、ログ、メトリクス、セッション管理を統合
  */
 
+import "dotenv/config";
 import express from "express";
 import { WebSocketServer, WebSocket } from "ws";
 import http from "http";

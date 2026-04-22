@@ -173,29 +173,20 @@ export async function handleClose(
       handlers.cleanup();
     }
 
-    // セッションの切断（リトライ）
+    // セッションの切断（リトライなし、タイムアウト付き）
     if (session) {
-      let disconnected = false;
-      let lastError: Error | null = null;
-
-      // 最大3回リトライ
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await session.disconnect();
-          disconnected = true;
-          break;
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err));
-          if (attempt < 2) {
-            await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
-          }
-        }
-      }
-
-      if (!disconnected && lastError) {
-        logger.debug("Session disconnect failed after retries", {
+      try {
+        // disconnect を行うが、リトライは行わない（迅速に完了させる）
+        await Promise.race([
+          session.disconnect(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("disconnect timeout")), 1000)
+          ),
+        ]);
+      } catch (err) {
+        logger.debug("Session disconnect error", {
           clientId,
-          error: lastError.message,
+          error: String(err),
         });
       }
     }

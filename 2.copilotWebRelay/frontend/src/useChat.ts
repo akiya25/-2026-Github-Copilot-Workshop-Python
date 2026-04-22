@@ -3,7 +3,7 @@
  * Immer を使用した効率的なストリーミング実装
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { produce } from "immer";
 import { v4 as uuidv4 } from "uuid";
 
@@ -17,6 +17,12 @@ export interface Message {
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const handlersRef = useRef<{
+    handleStreamingResponse: (content: string) => void;
+    finishStreaming: () => void;
+    addError: (message: string) => void;
+    addUserMessage: (content: string) => void;
+  } | null>(null);
 
   const addUserMessage = useCallback((content: string) => {
     const userMessage: Message = {

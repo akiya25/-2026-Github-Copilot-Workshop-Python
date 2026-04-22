@@ -3,7 +3,7 @@
  * カスタムフック(useChat, useWebSocket)を使用
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useChat, type Message } from "./useChat";
@@ -23,11 +23,24 @@ export default function App() {
 
   const chat = useChat();
   
-  // ハンドラー関数は直接渡す（useCallback で包まない）
-  const { isConnected, send, connect, cleanup, wsRef } = useWebSocket(
+  // ハンドラーをメモ化（WebSocket 接続の再実行を防ぐ）
+  const onDelta = useCallback(
     (content: string) => chat.handleStreamingResponse(content),
+    [chat.handleStreamingResponse]
+  );
+  const onDone = useCallback(
     () => chat.finishStreaming(),
-    (message: string) => chat.addError(message)
+    [chat.finishStreaming]
+  );
+  const onError = useCallback(
+    (message: string) => chat.addError(message),
+    [chat.addError]
+  );
+  
+  const { isConnected, send, connect, cleanup, wsRef } = useWebSocket(
+    onDelta,
+    onDone,
+    onError
   );
 
   /**
