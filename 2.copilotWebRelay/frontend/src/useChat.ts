@@ -1,8 +1,11 @@
 /**
  * useChat - チャット状態管理フック
+ * Immer を使用した効率的なストリーミング実装
  */
 
 import { useState, useCallback } from "react";
+import { produce } from "immer";
+import { v4 as uuidv4 } from "uuid";
 
 export interface Message {
   id: string;
@@ -17,43 +20,44 @@ export function useChat() {
 
   const addUserMessage = useCallback((content: string) => {
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: uuidv4(),
       role: "user",
       content,
     };
     setMessages((prev) => [...prev, userMessage]);
   }, []);
 
+  // Immer を使用した効率的なストリーミング更新
   const handleStreamingResponse = useCallback((content: string) => {
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === "assistant" && last.isStreaming) {
-        return [
-          ...prev.slice(0, -1),
-          { ...last, content: last.content + content },
-        ];
-      } else {
-        return [
-          ...prev,
-          {
-            id: Date.now().toString(),
+    setMessages(
+      produce((draft) => {
+        const last = draft[draft.length - 1];
+        
+        if (last && last.role === "assistant" && last.isStreaming) {
+          // 既存のアシスタントメッセージに追記（Immer で効率的）
+          last.content += content;
+        } else {
+          // 新しいアシスタントメッセージを作成
+          draft.push({
+            id: uuidv4(),
             role: "assistant",
             content,
             isStreaming: true,
-          },
-        ];
-      }
-    });
+          });
+        }
+      })
+    );
   }, []);
 
   const finishStreaming = useCallback(() => {
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === "assistant") {
-        return [...prev.slice(0, -1), { ...last, isStreaming: false }];
-      }
-      return prev;
-    });
+    setMessages(
+      produce((draft) => {
+        const last = draft[draft.length - 1];
+        if (last && last.role === "assistant") {
+          last.isStreaming = false;
+        }
+      })
+    );
     setIsLoading(false);
   }, []);
 
@@ -61,7 +65,7 @@ export function useChat() {
     setMessages((prev) => [
       ...prev,
       {
-        id: Date.now().toString(),
+        id: uuidv4(),
         role: "assistant",
         content: `⚠️ エラー: ${message}`,
         isStreaming: false,

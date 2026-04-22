@@ -3,7 +3,7 @@
  * カスタムフック(useChat, useWebSocket)を使用
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useChat, type Message } from "./useChat";
@@ -14,63 +14,56 @@ import "./App.css";
  * メインアプリケーション
  */
 export default function App() {
-  console.log("📱 App コンポーネントがレンダリングされました");
+  if (process.env.NODE_ENV === "development") {
+    console.log("📱 App コンポーネントがレンダリングされました");
+  }
 
   const [input, setInput] = useState("");
   const messagesEndRefForChat = useRef<HTMLDivElement>(null);
 
   const chat = useChat();
-  const handleDelta = useCallback(
-    (content: string) => {
-      chat.handleStreamingResponse(content);
-    },
-    [chat]
-  );
-
-  const handleDone = useCallback(() => {
-    chat.finishStreaming();
-  }, [chat]);
-
-  const handleError = useCallback(
-    (message: string) => {
-      chat.addError(message);
-    },
-    [chat]
-  );
-
+  
+  // ハンドラー関数は直接渡す（useCallback で包まない）
   const { isConnected, send, connect, cleanup, wsRef } = useWebSocket(
-    handleDelta,
-    handleDone,
-    handleError
+    (content: string) => chat.handleStreamingResponse(content),
+    () => chat.finishStreaming(),
+    (message: string) => chat.addError(message)
   );
 
   /**
    * メッセージスクロール
    */
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = () => {
     messagesEndRefForChat.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+  };
 
   useEffect(() => {
     scrollToBottom();
-  }, [chat.messages, scrollToBottom]);
+  }, [chat.messages]);
 
-  // 接続初期化
+  // 接続初期化（マウント時のみ実行）
   useEffect(() => {
-    console.log("🚀 useEffect: WebSocket 接続を初期化");
+    if (process.env.NODE_ENV === "development") {
+      console.log("🚀 useEffect: WebSocket 接続を初期化");
+    }
     connect();
 
     return () => {
-      console.log("🛑 クリーンアップ: WebSocket を閉じています");
+      if (process.env.NODE_ENV === "development") {
+        console.log("🛑 クリーンアップ: WebSocket を閉じています");
+      }
       cleanup();
-      wsRef.current?.close();
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      }
     };
-  }, [connect, cleanup, wsRef]);
+  }, []);
 
   /**
    * メッセージ送信
    */
-  const sendMessage = useCallback(() => {
+  const sendMessage = () => {
     if (!input.trim() || !isConnected || chat.isLoading) return;
 
     chat.addUserMessage(input);
@@ -81,7 +74,7 @@ export default function App() {
     } else {
       chat.addError("Failed to send message");
     }
-  }, [input, isConnected, chat, send]);
+  };
 
   /**
    * キーボード処理

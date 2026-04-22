@@ -2,12 +2,18 @@
  * useWebSocket - WebSocket接続管理フック
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 interface WebSocketMessage {
   type: "delta" | "done" | "error" | "pong";
   content?: string;
   message?: string;
+}
+
+interface Handlers {
+  onDelta: (content: string) => void;
+  onDone: () => void;
+  onError: (message: string) => void;
 }
 
 const getWebSocketURL = (): string => {
@@ -24,6 +30,12 @@ export function useWebSocket(
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const handlersRef = useRef<Handlers>({ onDelta, onDone, onError });
+
+  // handlersRef を常に最新に保つ（依存関係の外）
+  useEffect(() => {
+    handlersRef.current = { onDelta, onDone, onError };
+  }, [onDelta, onDone, onError]);
 
   // クリーンアップ関数
   const cleanup = useCallback(() => {
@@ -39,11 +51,15 @@ export function useWebSocket(
 
   // WebSocket 接続
   const connect = useCallback(() => {
-    console.log("🔌 WebSocket への接続を試みています...");
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔌 WebSocket への接続を試みています...");
+    }
     const ws = new WebSocket(getWebSocketURL());
 
     ws.onopen = () => {
-      console.log("✅ WebSocket に接続しました");
+      if (process.env.NODE_ENV === "development") {
+        console.log("✅ WebSocket に接続しました");
+      }
       setIsConnected(true);
 
       // ハートビート開始（30秒ごと）
@@ -52,15 +68,20 @@ export function useWebSocket(
           try {
             ws.send(JSON.stringify({ type: "ping" }));
           } catch (err) {
-            console.error("Failed to send ping:", err);
+            if (process.env.NODE_ENV === "development") {
+              console.error("Failed to send ping:", err);
+            }
           }
         }
       }, 30000);
     };
 
     ws.onclose = () => {
-      console.log("❌ WebSocket が切断されました。3秒後に再接続を試みます");
+      if (process.env.NODE_ENV === "development") {
+        console.log("❌ WebSocket が切断されました。3秒後に再接続を試みます");
+      }
       setIsConnected(false);
+      ws.onclose = null;
       cleanup();
 
       // 再接続スケジューリング
@@ -68,8 +89,10 @@ export function useWebSocket(
     };
 
     ws.onerror = (err) => {
-      console.error("❌ WebSocket エラー:", err);
-      onError("WebSocket connection error");
+      if (process.env.NODE_ENV === "development") {
+        console.error("❌ WebSocket エラー:", err);
+      }
+      handlersRef.current.onError("WebSocket connection error");
     };
 
     ws.onmessage = (event) => {
@@ -77,21 +100,22 @@ export function useWebSocket(
         const msg = JSON.parse(event.data) as WebSocketMessage;
 
         if (msg.type === "delta" && msg.content) {
-          onDelta(msg.content);
+          handlersRef.current.onDelta(msg.content);
         } else if (msg.type === "done") {
-          onDone();
+          handlersRef.current.onDone();
         } else if (msg.type === "error" && msg.message) {
-          onError(msg.message);
+          handlersRef.current.onError(msg.message);
         }
-        // pong は何もしない（疎通確認）
       } catch (err) {
-        console.error("Failed to parse message:", err);
-        onError("Failed to parse server message");
+        if (process.env.NODE_ENV === "development") {
+          console.error("Failed to parse message:", err);
+        }
+        handlersRef.current.onError("Failed to parse server message");
       }
     };
 
     wsRef.current = ws;
-  }, [cleanup, onDelta, onDone, onError]);
+  }, [cleanup]);
 
   // メッセージ送信
   const send = useCallback((message: string): boolean => {

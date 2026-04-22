@@ -71,14 +71,26 @@ export async function handleMessage(
 }
 
 /**
+ * セッションイベントハンドラー用の型定義
+ */
+interface SessionHandlers {
+  onMessageDelta: (event: any) => void;
+  onSessionIdle: () => void;
+  onSessionError: (err: any) => void;
+  cleanup: () => void;
+}
+
+/**
  * セッションイベントハンドラーセットアップ
+ * リスナー削除機構を備えたハンドラー管理
  */
 export function setupSessionEventHandlers(
   session: CopilotSessionType,
   ws: WebSocket,
   clientId: string
-): void {
-  session.on("assistant.message_delta", (event: any) => {
+): SessionHandlers {
+  // ハンドラー関数を別途定義（削除時に参照が必要）
+  const onMessageDelta = (event: any) => {
     if (ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(
@@ -91,9 +103,9 @@ export function setupSessionEventHandlers(
         logger.debug("Error sending delta", { clientId });
       }
     }
-  });
+  };
 
-  session.on("session.idle", () => {
+  const onSessionIdle = () => {
     if (ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify({ type: "done" }));
@@ -101,9 +113,9 @@ export function setupSessionEventHandlers(
         logger.debug("Error sending done", { clientId });
       }
     }
-  });
+  };
 
-  session.on("error", (err: any) => {
+  const onSessionError = (err: any) => {
     logger.error("Session error", { clientId, error: String(err) });
     metrics.recordError();
 
@@ -119,24 +131,77 @@ export function setupSessionEventHandlers(
         logger.debug("Error sending error message", { clientId });
       }
     }
-  });
+  };
+
+  // イベントリスナー登録
+  session.on("assistant.message_delta", onMessageDelta);
+  session.on("session.idle", onSessionIdle);
+  session.on("error", onSessionError);
+
+  // クリーンアップ関数：すべてのリスナーを削除
+  const cleanup = () => {
+    try {
+      session.removeListener?.("assistant.message_delta", onMessageDelta);
+      session.removeListener?.("session.idle", onSessionIdle);
+      session.removeListener?.("error", onSessionError);
+      logger.debug("Session event listeners cleaned up", { clientId });
+    } catch (err) {
+      logger.debug("Error during listener cleanup", { clientId, error: String(err) });
+    }
+  };
+
+  return {
+    onMessageDelta,
+    onSessionIdle,
+    onSessionError,
+    cleanup,
+  };
 }
 
 /**
  * クローズハンドラー
+ * リスナー削除を含む完全なクリーンアップ、リトライ対応
  */
 export async function handleClose(
   session: CopilotSessionType | null,
-  clientId: string
+  clientId: string,
+  handlers?: SessionHandlers
 ): Promise<void> {
   try {
-    if (session) {
-      await session.disconnect().catch(() => {
-        // 既に切断の可能性あり
-      });
+    // イベントリスナーの削除
+    if (handlers?.cleanup) {
+      handlers.cleanup();
     }
+
+    // セッションの切断（リトライ）
+    if (session) {
+      let disconnected = false;
+      let lastError: Error | null = null;
+
+      // 最大3回リトライ
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await session.disconnect();
+          disconnected = true;
+          break;
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+          }
+        }
+      }
+
+      if (!disconnected && lastError) {
+        logger.debug("Session disconnect failed after retries", {
+          clientId,
+          error: lastError.message,
+        });
+      }
+    }
+
     logger.info("Client connection closed", { clientId });
   } catch (err) {
-    logger.debug("Error closing session", { clientId });
+    logger.debug("Error closing session", { clientId, error: String(err) });
   }
 }

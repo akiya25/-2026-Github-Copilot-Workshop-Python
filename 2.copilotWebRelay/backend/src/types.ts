@@ -15,6 +15,7 @@ export interface CopilotSessionType {
   send(options: { prompt: string }): Promise<string | void>;
   disconnect(): Promise<void>;
   on(event: string, handler: (event: any) => void): void;
+  removeListener?(event: string, handler: (event: any) => void): void;
 }
 
 // WebSocket 接続情報
@@ -23,6 +24,16 @@ export interface ClientConnection {
   session: CopilotSessionType | null;
   clientId: string;
   connectedAt: Date;
+  sessionReady?: boolean;
+  handlers?: any;
+}
+
+// セッション状態トラッキング
+export interface SessionState {
+  isReady: boolean;
+  isDisconnected: boolean;
+  createdAt: Date;
+  lastActivityAt: Date;
 }
 
 // 検証エラー
