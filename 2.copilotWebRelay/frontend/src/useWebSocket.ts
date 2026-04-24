@@ -52,13 +52,13 @@ export function useWebSocket(
 
   // WebSocket 接続
   const connect = useCallback(() => {
-    if (process.env.NODE_ENV === "development") {
+    if (import.meta.env.DEV) {
       console.log("🔌 WebSocket への接続を試みています...");
     }
     const ws = new WebSocket(getWebSocketURL());
 
     ws.onopen = () => {
-      if (process.env.NODE_ENV === "development") {
+      if (import.meta.env.DEV) {
         console.log("✅ WebSocket に接続しました");
       }
       setIsConnected(true);
@@ -70,7 +70,7 @@ export function useWebSocket(
           try {
             ws.send(JSON.stringify({ type: "ping" }));
           } catch (err) {
-            if (process.env.NODE_ENV === "development") {
+            if (import.meta.env.DEV) {
               console.error("Failed to send ping:", err);
             }
           }
@@ -79,7 +79,7 @@ export function useWebSocket(
     };
 
     ws.onclose = () => {
-      if (process.env.NODE_ENV === "development") {
+      if (import.meta.env.DEV) {
         console.log("❌ WebSocket が切断されました。3秒後に再接続を試みます");
       }
       setIsConnected(false);
@@ -91,7 +91,7 @@ export function useWebSocket(
     };
 
     ws.onerror = (err) => {
-      if (process.env.NODE_ENV === "development") {
+      if (import.meta.env.DEV) {
         console.error("❌ WebSocket エラー:", err);
       }
       // 初回接続時のエラーは無視（自動的に再接続される）
@@ -112,7 +112,7 @@ export function useWebSocket(
           handlersRef.current.onError(msg.message);
         }
       } catch (err) {
-        if (process.env.NODE_ENV === "development") {
+        if (import.meta.env.DEV) {
           console.error("Failed to parse message:", err);
         }
         handlersRef.current.onError("Failed to parse server message");

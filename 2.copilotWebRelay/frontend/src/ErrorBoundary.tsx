@@ -16,21 +16,21 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error) {
-    if (process.env.NODE_ENV === "development") {
+    if (import.meta.env.DEV) {
       console.error("❌ ErrorBoundary が捕捉しました:", error);
     }
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    if (process.env.NODE_ENV === "development") {
+    if (import.meta.env.DEV) {
       console.error('ErrorBoundary componentDidCatch:', error, errorInfo);
     }
   }
 
   render() {
     if (this.state.hasError) {
-      const isDevelopment = process.env.NODE_ENV === "development";
+      const isDevelopment = import.meta.env.DEV;
       
       return (
         <div style={{

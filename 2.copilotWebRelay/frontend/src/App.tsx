@@ -14,7 +14,7 @@ import "./App.css";
  * メインアプリケーション
  */
 export default function App() {
-  if (process.env.NODE_ENV === "development") {
+  if (import.meta.env.DEV) {
     console.log("📱 App コンポーネントがレンダリングされました");
   }
 
@@ -56,13 +56,13 @@ export default function App() {
 
   // 接続初期化（マウント時のみ実行）
   useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
+    if (import.meta.env.DEV) {
       console.log("🚀 useEffect: WebSocket 接続を初期化");
     }
     connect();
 
     return () => {
-      if (process.env.NODE_ENV === "development") {
+      if (import.meta.env.DEV) {
         console.log("🛑 クリーンアップ: WebSocket を閉じています");
       }
       cleanup();
