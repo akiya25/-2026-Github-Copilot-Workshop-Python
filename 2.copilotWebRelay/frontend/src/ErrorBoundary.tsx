@@ -16,16 +16,22 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error) {
-    console.error("❌ ErrorBoundary が捕捉しました:", error);
+    if (import.meta.env.DEV) {
+      console.error("❌ ErrorBoundary が捕捉しました:", error);
+    }
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary componentDidCatch:', error, errorInfo);
+    if (import.meta.env.DEV) {
+      console.error('ErrorBoundary componentDidCatch:', error, errorInfo);
+    }
   }
 
   render() {
     if (this.state.hasError) {
+      const isDevelopment = import.meta.env.DEV;
+      
       return (
         <div style={{
           display: 'flex',
@@ -40,9 +46,18 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           whiteSpace: 'pre-wrap',
         }}>
           <h1 style={{ color: '#f85149', marginBottom: '20px' }}>❌ エラーが発生しました</h1>
-          <p style={{ background: '#161b22', padding: '20px', borderRadius: '8px', border: '1px solid #f85149' }}>
-            {this.state.error?.message || '不明なエラー'}<br/><br/>
-            {this.state.error?.stack}
+          <p style={{ background: '#161b22', padding: '20px', borderRadius: '8px', border: '1px solid #f85149', maxWidth: '600px' }}>
+            {isDevelopment ? (
+              <>
+                {this.state.error?.message || '不明なエラー'}<br/><br/>
+                {this.state.error?.stack}
+              </>
+            ) : (
+              <>
+                申し訳ありません。予期しないエラーが発生しました。<br/>
+                ページを更新して、もう一度お試しください。
+              </>
+            )}
           </p>
         </div>
       );
